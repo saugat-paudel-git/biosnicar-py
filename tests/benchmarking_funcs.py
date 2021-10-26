@@ -6,7 +6,7 @@ import pandas as pd
 import collections
 
 
-def generate_snicar_params_single_layer(layer_type, density, dz, alg, solzen, reff, bc):
+def generate_snicar_params(layer_type, density, dz, alg, solzen, reff, bc):
     
     rho_layers = [density]*len(dz)
     reff =[reff]*len(dz)
