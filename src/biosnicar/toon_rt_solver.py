@@ -15,31 +15,27 @@ The Toon solver was originally coded in FORTRAN and then Matlab by Mark Flanner.
 His Matlab scripts were the jumping off point for this script and are still
 used to benchmark this code against.
 
-This solver can only treat ice as a "granular" material with a bulk medium of air 
+This solver can only treat ice as a "granular" material with a bulk medium of air
 with discrete ice grains. No Fresnel reflection is included in this solver. There
 are also well-known instabilities that arise at certain solar zenith angles (see
-Toon et al. 1989). Our model does not accept solar zenith angles that fall outside 
+Toon et al. 1989). Our model does not accept solar zenith angles that fall outside
 of the valid range for the Toon solver. Swapping to the adding-doubling solver is
-a route around this problem - there the solar zenith angle can range from 1-89 
+a route around this problem - there the solar zenith angle can range from 1-89
 degrees. The main benefit of the Toon solver is speed, and continuity from legacy
 radiative transfer models.
 
 """
-
-
-
-import sys
-sys.path.append("./src")
+import numpy as np
 from scipy.signal import savgol_filter
-from setup_snicar import *
-from classes import *
+
+from biosnicar.classes import Outputs
 
 
 def toon_solver(tau, ssa, g, L_snw, ice, illumination, model_config, rt_config):
     """Driver func for toon radiative transfer solver.
 
     Makes function calls relating to radiative transfer solver in sequence and returns outputs.
-    
+
     Args:
         tau: optical thickness
         ssa: single scattering albedo
@@ -238,13 +234,13 @@ def calculate_optical_depth_of_column(ice, model_config, tau_star):
     """Calculates colum,n optical thickness.
 
     Args:
-        ice: instance of Ice class 
+        ice: instance of Ice class
         model_config: instance of ModelConfig class
         tau_star: delta scaled optical thickness
-    
+
     Returns:
         tau_clm: optical thickness of column
-    
+
     """
     tau_clm = np.zeros([ice.nbr_lyr, model_config.nbr_wvl])
 
@@ -263,7 +259,7 @@ def boundary_condition(ice, illumination, tau_clm, tau_star):
         illumination: instance of Illumination class
         tau_clm: optical thickness of column
         tau_star: delta_scaled optical thickness
-    
+
     Returns:
         S_sfc: reflectance from underlying surface
     """
@@ -297,7 +293,7 @@ def two_stream_approximation(rt_config, ssa_star, g_star, illumination):
         rt_config: instance of RTConfig class
         ssa_star: delta scaled signle scattering albedo
         g_star: delta scaled asymmetry parameter
-    
+
     Returns:
         gamma1: coefficient for matrix solution
         gamma2: coefficient for matrix solution
@@ -341,7 +337,7 @@ def calculate_matrix_coefficients(gamma1, gamma2, tau_star):
         gamma1: coefficient for matrix solution
         gamma2: coefficient for matrix solution
         tau_star: delta scaled optical thickness
-    
+
     Returns:
         lam: coefficient for matrix solution
         GAMMA: coefficient for matrix solution
@@ -391,7 +387,7 @@ def c_functions(
         gamma2: coefficient for matrix solution
         gamma3: coefficient for matrix solution
         gamma4: coefficient for matrix solution
-    
+
     Returns:
         C_pls_btm: upwards flux from bottom of layer
         C_mns_btm: downwards flux from bottom of layer
@@ -491,7 +487,7 @@ def matrix_solver(
         e2: coefficient for matrix solution
         e3: coefficient for matrix solution
         e4: coefficient for matrix solution
-    
+
     Returns:
         Y: intermediate representing t-0boundary fluxes
     """
@@ -605,7 +601,7 @@ def layer_fluxes(
     mu_one,
 ):
     """Calculate total fluxes.
-    
+
     Args:
         ice: instance of Ice class
         illumination: instance of Illumination class
@@ -718,7 +714,7 @@ def absorbed_fluxes(ice, model_config, F_net, F_top_net):
         model_config: instance of ModelConfig class
         F_net: net flux in each layer
         F_top_net: net flux at upper model boundary
-    
+
     Returns:
         F_abs: absorbed flux in each layer
 
@@ -874,5 +870,6 @@ def apply_smoothing_function(albedo, model_config):
 
     return albedo
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     pass

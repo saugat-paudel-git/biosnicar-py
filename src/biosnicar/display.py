@@ -1,7 +1,4 @@
 #!/usr/bin/python
-import sys
-sys.path.append("./src")
-from classes import *
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -81,5 +78,5 @@ def calculate_band_ratios(albedo):
     return I2DBA, I3DBA, NDCI, MCI, II
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     pass

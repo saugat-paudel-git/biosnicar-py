@@ -1,9 +1,16 @@
 #!/usr/bin/python
-import sys
-sys.path.append("./src")
-import yaml
-from classes import *
 
+import yaml
+
+from biosnicar.classes import (
+    Ice,
+    Illumination,
+    Impurity,
+    ModelConfig,
+    Outputs,
+    PlotConfig,
+    RTConfig,
+)
 
 
 def setup_snicar(input_file):
@@ -95,5 +102,6 @@ def build_impurities_array(input_file):
 
     return impurities
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     pass

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
-sys.path.append("./src")
-from setup_snicar import *
-from classes import *
-from column_OPs import *
-from biooptical_funcs import *
-from toon_rt_solver import toon_solver
-from adding_doubling_solver import adding_doubling_solver
-from validate_inputs import *
-from display import *
+from pathlib import Path
+
+from biosnicar.adding_doubling_solver import adding_doubling_solver
+from biosnicar.column_OPs import get_layer_OPs, mix_in_impurities
+from biosnicar.display import display_out_data, plot_albedo
+from biosnicar.setup_snicar import setup_snicar
+from biosnicar.toon_rt_solver import toon_solver
+from biosnicar.validate_inputs import validate_inputs
+
+BIOSNICAR_SRC_PATH = Path(__file__).resolve().parent
 
 
 # define input file
-input_file = "./src/inputs.yaml"
+INPUT_FILE = BIOSNICAR_SRC_PATH.joinpath("inputs.yaml").as_posix()
 
 ###################
 # BIO-OPTICAL MODEL
@@ -24,7 +24,7 @@ input_file = "./src/inputs.yaml"
 # the BioSNICAR database. Commewnted out by default as we expect our default lap
 # database to be sufficient for most users.
 
-#run_biooptical_model(input_file)
+# run_biooptical_model(input_file)
 
 ###########################
 # RADIATIVE TRANSFER MODEL
@@ -38,7 +38,7 @@ input_file = "./src/inputs.yaml"
     model_config,
     plot_config,
     impurities,
-) = setup_snicar(input_file)
+) = setup_snicar(INPUT_FILE)
 
 # validate inputs to ensure no invalid combinations have been chosen
 status = validate_inputs(ice, rt_config, model_config, illumination, impurities)
