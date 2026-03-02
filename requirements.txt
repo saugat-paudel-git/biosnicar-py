@@ -1,12 +1,10 @@
 streamlit
+numpy
 pandas
 matplotlib
 miepython
-netCDF4
 scipy
 seaborn
-xarray
-pytest
 tqdm
 pyyaml
 plotly
