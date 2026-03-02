@@ -44,7 +44,7 @@ Instructions for using the app are provided below.
 
 #### Run the app
 
-To run the deployed version of the app simply direct your browser to [bit.ly/bio-snicar](bit.ly/bio-snicar). Alternatively, run the app locally by following these instructions:
+To run the deployed version of the app simply direct your browser to [bit.ly/bio-snicar](https://bit.ly/bio-snicar). Alternatively, run the app locally by following these instructions:
 
 The code for the Streamlit app is in `~/app.py`.
 
