@@ -9,6 +9,17 @@ BioSNICAR predicts the spectral albedo of snow and glacier ice between 200nm to 
 
 NOTE: This code utilizes the miepython solver (Scott Prahl, https://github.com/scottprahl/miepython/tree/main) by default instead of the Bohren and Huffman 1983 solver as per the original Matlab version, hence slight differences exist in the computed albedo. The rationale for using the miepython solver was mostly due to the time efficiency of the computations, so that users can compute new grain/bubble SSPs for a given effective radius if it is not already available in the model (`ssps_spheres_generator.py` in the classic branch). It is however possible to fall back to the BH83 solver by changing the refractive index variant in the ice optical properties configuration (see the OP_DIR_STUBS and related settings in `inputs.yaml`).
 
+## Important notice: repository history rewrite (March 2026)
+
+The git history of this repository was rewritten in March 2026 to remove large binary files that had accumulated across past commits, bringing the download size from ~1GB to ~170 MB. If you cloned the repository before this date your local history will no longer match the remote. To sync up, the simplest fix is to **delete your local clone and re-clone**:
+
+```
+rm -rf biosnicar-py
+git clone https://github.com/jmcook1186/biosnicar-py.git
+```
+
+No source code or data files were lost — only duplicate historical versions of large data files were removed. Existing forks will also need to be re-forked or have their history reset.
+
 ## Documentation and recent updates
 
 Detailed documentation is available at https://biosnicar.vercel.app. This README gives a brief overview of the key information required to run the model.
