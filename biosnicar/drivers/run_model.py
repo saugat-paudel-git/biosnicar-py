@@ -137,15 +137,21 @@ def _apply_overrides(overrides, ice, illumination, impurities, input_file):
             new_nbr_lyr = len(value)
             break
 
-    # If layer count is changing, resize all per-layer ice attributes first
+    # If layer count is changing, resize all per-layer attributes first
     if new_nbr_lyr is not None and new_nbr_lyr != ice.nbr_lyr:
         for attr in _ICE_ALL_LIST_ATTRS:
             old = getattr(ice, attr)
             if len(old) < new_nbr_lyr:
-                # Extend by repeating last value
                 setattr(ice, attr, old + [old[-1]] * (new_nbr_lyr - len(old)))
             elif len(old) > new_nbr_lyr:
                 setattr(ice, attr, old[:new_nbr_lyr])
+        # Resize impurity concentrations too
+        for imp in impurities:
+            old = imp.conc
+            if len(old) < new_nbr_lyr:
+                imp.conc = old + [0] * (new_nbr_lyr - len(old))
+            elif len(old) > new_nbr_lyr:
+                imp.conc = old[:new_nbr_lyr]
         ice.nbr_lyr = new_nbr_lyr
 
     for key, value in overrides.items():
