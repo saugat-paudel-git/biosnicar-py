@@ -8,4 +8,5 @@ seaborn
 tqdm
 pyyaml
 plotly
+pytest
 .
