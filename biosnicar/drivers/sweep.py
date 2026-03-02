@@ -128,6 +128,7 @@ def parameter_sweep(
             row[attr] = getattr(outputs, attr)
         if return_spectral:
             row["albedo"] = np.array(outputs.albedo)
+            row["flx_slr"] = np.array(outputs.flx_slr)
         results.append(row)
 
     return pd.DataFrame(results)

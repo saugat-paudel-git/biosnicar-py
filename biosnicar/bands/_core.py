@@ -1,0 +1,100 @@
+"""Shared utilities for platform band convolution.
+
+Provides the authoritative 480-band wavelength grid, SRF loading/caching,
+SRF-weighted convolution, and flux-weighted interval averaging.
+"""
+
+import csv
+import numpy as np
+from pathlib import Path
+
+from biosnicar import DATA_DIR
+
+# Authoritative 480-band wavelength grid (µm), mirrors model_config.wavelengths
+WVL = np.arange(0.205, 4.999, 0.01)  # shape (480,)
+N_WVL = len(WVL)
+
+# Module-level SRF cache: {sensor_name: {band_name: np.array(480)}}
+_srf_cache = {}
+
+
+def load_srf(sensor_name):
+    """Load a CSV spectral response function and cache it.
+
+    The CSV must live at ``data/band_srfs/{sensor_name}.csv`` with columns
+    ``wavelength_um,B1,B2,...``.  Values are interpolated onto :data:`WVL` if
+    needed (though generated tophats are already on-grid).
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        Mapping of band name → SRF array (480,).
+    """
+    if sensor_name in _srf_cache:
+        return _srf_cache[sensor_name]
+
+    path = DATA_DIR / "band_srfs" / f"{sensor_name}.csv"
+    with open(path, newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+    band_names = header[1:]
+
+    data = np.loadtxt(path, delimiter=",", skiprows=1)
+    wvl_csv = data[:, 0]
+    srf_dict = {}
+    for i, bname in enumerate(band_names):
+        raw = data[:, i + 1]
+        if len(wvl_csv) == N_WVL and np.allclose(wvl_csv, WVL, atol=1e-6):
+            srf_dict[bname] = raw
+        else:
+            srf_dict[bname] = np.interp(WVL, wvl_csv, raw, left=0.0, right=0.0)
+
+    _srf_cache[sensor_name] = srf_dict
+    return srf_dict
+
+
+def srf_convolve(albedo, flx_slr, srf):
+    """Flux-weighted SRF convolution for a single band.
+
+    Parameters
+    ----------
+    albedo : np.ndarray (480,)
+        Spectral albedo from BioSNICAR.
+    flx_slr : np.ndarray (480,)
+        Spectral solar flux (W m-2 per band).
+    srf : np.ndarray (480,)
+        Spectral response function (dimensionless, 0–1).
+
+    Returns
+    -------
+    float
+        Band-averaged albedo: Σ(albedo × SRF × flx) / Σ(SRF × flx).
+    """
+    weight = srf * flx_slr
+    denom = np.sum(weight)
+    if denom == 0:
+        return np.nan
+    return float(np.sum(albedo * weight) / denom)
+
+
+def interval_average(albedo, flx_slr, lo_um, hi_um):
+    """Flux-weighted mean albedo over [lo_um, hi_um).
+
+    Parameters
+    ----------
+    albedo : np.ndarray (480,)
+    flx_slr : np.ndarray (480,)
+    lo_um, hi_um : float
+        Wavelength bounds in µm.
+
+    Returns
+    -------
+    float
+        Flux-weighted mean albedo in the interval.
+    """
+    mask = (WVL >= lo_um) & (WVL < hi_um)
+    flx = flx_slr[mask]
+    denom = np.sum(flx)
+    if denom == 0:
+        return np.nan
+    return float(np.sum(albedo[mask] * flx) / denom)

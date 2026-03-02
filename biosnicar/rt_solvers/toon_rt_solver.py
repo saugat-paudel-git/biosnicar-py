@@ -823,6 +823,9 @@ def get_outputs(
     )
     outputs.absorbed_flux_per_layer = F_abs
 
+    # Spectral solar flux (for downstream band convolution)
+    outputs.flx_slr = illumination.flx_slr.copy()
+
     return outputs
 
 

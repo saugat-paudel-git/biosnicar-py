@@ -30,4 +30,5 @@ class Outputs:
         self.abs_slr_tot = None
         self.abs_vis_tot = None
         self.abs_nir_tot = None
-        self.absorbed_flux_per_layer = None 
+        self.absorbed_flux_per_layer = None
+        self.flx_slr = None

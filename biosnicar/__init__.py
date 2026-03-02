@@ -11,3 +11,10 @@ def run_model(*args, **kwargs):
     from biosnicar.drivers.run_model import run_model as _run_model
 
     return _run_model(*args, **kwargs)
+
+
+def to_platform(*args, **kwargs):
+    """Convolve spectral albedo onto platform bands. See :func:`biosnicar.bands.to_platform`."""
+    from biosnicar.bands import to_platform as _to_platform
+
+    return _to_platform(*args, **kwargs)
