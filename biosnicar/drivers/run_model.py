@@ -28,7 +28,10 @@ _IMPURITY_CONC_RE = re.compile(r"^impurity_(\d+)_conc$")
 _ILLUMINATION_KEYS = {"solzen", "direct", "incoming"}
 
 # Parameter keys that apply to the ice object (broadcast to all layers)
-_ICE_BROADCAST_KEYS = {"rds", "rho", "dz", "lwc", "layer_type"}
+_ICE_BROADCAST_KEYS = {
+    "rds", "rho", "dz", "lwc", "layer_type",
+    "cdom", "shp", "water", "hex_side", "hex_length", "shp_fctr", "grain_ar",
+}
 
 # All per-layer ice list attributes (used to resize when nbr_lyr changes)
 _ICE_ALL_LIST_ATTRS = [
@@ -62,15 +65,24 @@ def run_model(
             - **solzen** (*float*) — solar zenith angle (degrees)
             - **direct** (*int*) — 1 for direct beam, 0 for diffuse
             - **incoming** (*int*) — irradiance spectrum index (0–6)
-            - **rds** (*int | list*) — grain/bubble radius (µm), broadcast
-              to all layers if scalar
+            - **rds** (*int | list*) — grain/bubble radius (µm)
             - **rho** (*int | list*) — layer density (kg/m³)
             - **dz** (*float | list*) — layer thickness (m)
             - **lwc** (*float | list*) — liquid water content
             - **layer_type** (*int | list*) — 0=grains, 1=solid ice, etc.
+            - **shp** (*int | list*) — grain shape
+            - **grain_ar** (*float | list*) — grain aspect ratio
+            - **cdom** (*float | list*) — CDOM concentration
+            - **water** (*float | list*) — liquid water coating radius
+            - **hex_side** (*int | list*) — hexagonal column side length
+            - **hex_length** (*int | list*) — hexagonal column length
+            - **shp_fctr** (*float | list*) — shape factor
             - **impurity_{i}_conc** (*float | list*) — concentration for
               impurity *i* (0-based index), broadcast to ``[value, 0, ...]``
               if scalar
+
+            All ice parameters are broadcast to all layers if a scalar is
+            passed, or applied directly if a list.
 
     Returns:
         :class:`~biosnicar.classes.outputs.Outputs` with albedo, BBA,

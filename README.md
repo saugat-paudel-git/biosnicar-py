@@ -96,11 +96,13 @@ outputs = run_model(solzen=50, rds=1000, impurity_0_conc=500)
 print(outputs.albedo)  # 480-element spectral albedo
 ```
 
-Supported override keys: `solzen`, `direct`, `incoming`, `rds`, `rho`, `dz`, `lwc`, `layer_type`, and `impurity_{i}_conc` (where `i` is the 0-based impurity index). Scalar values for ice parameters are broadcast to all layers; scalar impurity concentrations are applied to the first layer only.
+Supported override keys: `solzen`, `direct`, `incoming`, `rds`, `rho`, `dz`, `lwc`, `layer_type`, `shp`, `grain_ar`, `cdom`, `water`, `hex_side`, `hex_length`, `shp_fctr`, and `impurity_{i}_conc` (where `i` is the 0-based impurity index). Scalar values for ice parameters are broadcast to all layers; scalar impurity concentrations are applied to the first layer only.
+
+If a list override changes the number of layers (e.g. passing a 5-element `dz` when the default config has 2), all per-layer attributes are automatically resized. Ice properties (`rds`, `rho`, `grain_ar`, etc.) are extended by repeating their last value; impurity concentrations are zero-padded. This means you only need to specify the parameters you care about — the rest adjust to match.
 
 `run_model()` is also accessible as `biosnicar.run_model()` after `import biosnicar`.
 
-Most users will want to experiment with changing input parameters. For batch configuration, adjust the values in the config file `inputs.yaml`. The nature of each parameter is described in in-line annotations to guide the user. Invalid combinations of values will be rejected by our error-checking code.
+Parameters not exposed as `run_model()` overrides — such as refractive index variant (`OP_DIR_STUBS`), surface reflectance file (`SFC`), and RT approximation type (`APRX_TYP`) — can be changed by editing `biosnicar/inputs.yaml` directly or by passing a custom YAML path via `input_file=`. See the in-line annotations in `inputs.yaml` for guidance on valid values.
 
 ### Parameter Sweeps
 

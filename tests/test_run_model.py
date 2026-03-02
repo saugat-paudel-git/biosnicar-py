@@ -73,3 +73,76 @@ def test_biosnicar_module_run_model():
     outputs = biosnicar.run_model(solzen=50)
     assert isinstance(outputs, Outputs)
     assert 0 < outputs.BBA < 1
+
+
+def test_override_shp_scalar():
+    """Scalar shp override broadcasts to all layers."""
+    outputs = run_model(shp=0)
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
+
+
+def test_override_grain_ar_scalar():
+    """Scalar grain_ar override broadcasts to all layers."""
+    outputs = run_model(grain_ar=0)
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
+
+
+def test_override_hex_geometry():
+    """Hexagonal column geometry overrides are accepted."""
+    outputs = run_model(hex_side=5000, hex_length=5000)
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
+
+
+def test_override_water_coating():
+    """Water coating override is accepted."""
+    outputs = run_model(water=0)
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
+
+
+def test_override_cdom():
+    """CDOM override is accepted."""
+    outputs = run_model(cdom=0)
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
+
+
+def test_override_shp_fctr():
+    """Shape factor override is accepted."""
+    outputs = run_model(shp_fctr=0)
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
+
+
+def test_override_multiple_new_keys():
+    """Multiple new ice overrides can be combined."""
+    outputs = run_model(shp=0, grain_ar=0, cdom=0, water=0, shp_fctr=0)
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
+
+
+def test_layer_count_change_resizes_all():
+    """Changing layer count via dz resizes all attributes including impurities."""
+    outputs = run_model(
+        dz=[0.01, 0.02, 0.03],
+        rds=[500, 800, 1000],
+        rho=[400, 600, 700],
+        shp=[0, 0, 0],
+        impurity_1_conc=[10000, 0, 0],
+    )
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
+
+
+def test_layer_count_change_without_impurity_override():
+    """Changing layer count works even when no impurity overrides are given."""
+    outputs = run_model(
+        dz=[0.02, 0.05, 0.05, 0.05, 0.83],
+        rds=[800, 900, 1000, 1100, 1200],
+        rho=[500, 600, 700, 750, 800],
+    )
+    assert isinstance(outputs, Outputs)
+    assert 0 < outputs.BBA < 1
