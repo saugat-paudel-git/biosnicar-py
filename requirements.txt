@@ -9,4 +9,4 @@ tqdm
 pyyaml
 plotly
 pytest
--e .
+.
