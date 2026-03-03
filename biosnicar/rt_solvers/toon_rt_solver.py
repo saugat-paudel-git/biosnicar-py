@@ -431,7 +431,7 @@ def c_functions(
                     (gamma1[i, :] - (1 / illumination.mu_not)) * gamma3[i, :]
                     + (gamma4[i, :] * gamma2[i, :])
                 )
-            ) / ((lam[1, :] ** 2) - (1 / illumination.mu_not**2))
+            ) / ((lam[i, :] ** 2) - (1 / illumination.mu_not**2))
 
             C_mns_top[i, :] = (
                 ssa_star[i, :]
@@ -695,6 +695,11 @@ def layer_fluxes(
             + direct[i, :]
         )
 
+    # Net flux at upper model boundary
+    F_top_net[0, :] = F_top_pls - (
+        (illumination.mu_not * np.pi * illumination.Fs) + illumination.Fd
+    )
+
     # Net flux at lower model boundary = bulk transmission through entire media
     # = energy absorbed by underlying surface
     F_btm_net[0, :] = -F_net[ice.nbr_lyr - 1, :]
@@ -759,10 +764,7 @@ def get_outputs(
         (illumination.mu_not * np.pi * illumination.Fs) + illumination.Fd
     )
 
-    # Net flux at upper model boundary
-    F_top_net[0, :] = F_top_pls - (
-        (illumination.mu_not * np.pi * illumination.Fs) + illumination.Fd
-    )
+    # F_top_net already computed in layer_fluxes()
 
     for i in np.arange(0, ice.nbr_lyr, 1):
         abs_vis[i] = np.sum(F_abs[i, 0 : model_config.vis_max_idx])
@@ -774,10 +776,10 @@ def get_outputs(
     outputs.abs_slr = np.sum(F_abs, axis=1)
 
     # energy absorbed by underlying substrate
-    outputs.abs_slr_btm = sum(np.squeeze(F_btm_net))
-    outputs.abs_vis_btm = sum(np.squeeze(F_btm_net[0 : model_config.vis_max_idx]))
-    outputs.abs_nir_btm = sum(
-        np.squeeze(F_btm_net[0, model_config.vis_max_idx : model_config.nir_max_idx])
+    outputs.abs_slr_btm = np.sum(F_btm_net)
+    outputs.abs_vis_btm = np.sum(F_btm_net[0, 0 : model_config.vis_max_idx])
+    outputs.abs_nir_btm = np.sum(
+        F_btm_net[0, model_config.vis_max_idx : model_config.nir_max_idx]
     )
 
     # Calculate radiative heating rate in kelvin per second.
@@ -802,22 +804,22 @@ def get_outputs(
     # Spectrally - integrated solar, visible, and NIR albedos:
     outputs.BBA = np.sum(illumination.flx_slr * albedo) / np.sum(illumination.flx_slr)
 
-    outputs.BBAVIS = sum(
+    outputs.BBAVIS = np.sum(
         illumination.flx_slr[0 : model_config.vis_max_idx]
         * albedo[0 : model_config.vis_max_idx]
-    ) / sum(illumination.flx_slr[0 : model_config.vis_max_idx])
+    ) / np.sum(illumination.flx_slr[0 : model_config.vis_max_idx])
 
-    outputs.BBANIR = sum(
+    outputs.BBANIR = np.sum(
         illumination.flx_slr[model_config.vis_max_idx : model_config.nir_max_idx]
         * albedo[model_config.vis_max_idx : model_config.nir_max_idx]
-    ) / sum(illumination.flx_slr[model_config.vis_max_idx : model_config.nir_max_idx])
+    ) / np.sum(illumination.flx_slr[model_config.vis_max_idx : model_config.nir_max_idx])
 
     # % Spectrally - integrated VIS and NIR total snowpack absorption:
-    outputs.abs_vis_tot = sum(
+    outputs.abs_vis_tot = np.sum(
         illumination.flx_slr[0 : model_config.vis_max_idx]
         * (1 - albedo[0 : model_config.vis_max_idx])
     )
-    outputs.abs_nir_tot = sum(
+    outputs.abs_nir_tot = np.sum(
         illumination.flx_slr[model_config.vis_max_idx : model_config.nir_max_idx]
         * (1 - albedo[model_config.vis_max_idx : model_config.nir_max_idx])
     )

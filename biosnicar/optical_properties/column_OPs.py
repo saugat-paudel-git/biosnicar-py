@@ -179,9 +179,11 @@ def get_layer_OPs(ice, model_config):
                     4 * np.pi * ice.ref_idx_im_water / (model_config.wavelengths * 1e-6)
                 ) / 1000
 
-                # volume weighted assymetry parameter
-                g_snw[i, :] = (g_air_bbl * vlm_frac_air + g_water * vlm_frac_lw_in_bbl) / (
-                    vlm_frac_lw_in_bbl + vlm_frac_air
+                # scattering-coefficient weighted asymmetry parameter
+                sca_air = sca_cff_vlm_air_bbl * vlm_frac_air
+                sca_water = sca_cff_vlm_water * vlm_frac_lw_in_bbl
+                g_snw[i, :] = (g_air_bbl * sca_air + g_water * sca_water) / (
+                    sca_air + sca_water
                 )
 
                 # volume weighted extinction coefficient
@@ -667,9 +669,15 @@ def mix_in_impurities(ssa_snw, g_snw, mac_snw, ice, impurities, model_config):
         # finally, for each layer calculate the effective ssa, tau and g
         # for the snow+LAP
         tau[i, :] = tau_sum[i, :] + tau_snw[i, :]
-        ssa[i, :] = (1 / tau[i, :]) * (ssa_sum[i, :] + (ssa_snw[i, :] * tau_snw[i, :]))
-        g[i, :] = (1 / (tau[i, :] * (ssa[i, :]))) * (
-            g_sum[i, :] + (g_snw[i, :] * ssa_snw[i, :] * tau_snw[i, :])
+        nonzero = tau[i, :] > 0
+        ssa[i, nonzero] = (1 / tau[i, nonzero]) * (
+            ssa_sum[i, nonzero] + (ssa_snw[i, nonzero] * tau_snw[i, nonzero])
+        )
+        scat = tau[i, :] * ssa[i, :]
+        nonzero_scat = scat > 0
+        g[i, nonzero_scat] = (1 / scat[nonzero_scat]) * (
+            g_sum[i, nonzero_scat]
+            + (g_snw[i, nonzero_scat] * ssa_snw[i, nonzero_scat] * tau_snw[i, nonzero_scat])
         )
 
     # just in case any unrealistic values arise (none detected so far)
