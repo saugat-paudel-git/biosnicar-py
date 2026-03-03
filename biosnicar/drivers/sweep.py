@@ -12,6 +12,11 @@ Example usage::
     )
     df.pivot_table(values="BBA", index="solzen", columns="rds").plot()
 
+    # Chain with platform band convolution:
+    df = parameter_sweep(
+        params={"rds": [500, 1000], "solzen": [50, 60]},
+    ).to_platform("sentinel2")
+
 """
 
 import itertools
@@ -25,6 +30,62 @@ from biosnicar.drivers.setup_snicar import setup_snicar
 from biosnicar.optical_properties.column_OPs import get_layer_OPs, mix_in_impurities
 from biosnicar.rt_solvers.adding_doubling_solver import adding_doubling_solver
 from biosnicar.rt_solvers.toon_rt_solver import toon_solver
+
+
+class SweepResult(pd.DataFrame):
+    """DataFrame subclass returned by :func:`parameter_sweep`.
+
+    Adds a :meth:`to_platform` method for chaining band convolution::
+
+        parameter_sweep(params={...}).to_platform("sentinel2")
+    """
+
+    _metadata = ["_spectral"]
+
+    @property
+    def _constructor(self):
+        return SweepResult
+
+    def to_platform(self, *platforms):
+        """Convolve spectral albedo onto platform bands for every row.
+
+        Args:
+            *platforms: One or more platform keys (e.g. ``"sentinel2"``,
+                ``"modis"``).  When a single platform is given, band columns
+                are unprefixed (``B3``, ``NDSI``).  When multiple platforms
+                are given, columns are prefixed (``sentinel2_B3``,
+                ``modis_B1``).
+
+        Returns:
+            :class:`pandas.DataFrame` with the original sweep columns plus
+            band albedo and index columns appended.
+        """
+        from biosnicar.bands import to_platform as _to_platform
+
+        if not platforms:
+            raise ValueError("Provide at least one platform name.")
+
+        if not hasattr(self, "_spectral") or self._spectral is None:
+            raise RuntimeError(
+                "No spectral data stored on this SweepResult. "
+                "This is a bug -- please report it."
+            )
+
+        prefix = len(platforms) > 1
+        rows = []
+        for albedo, flx_slr in self._spectral:
+            band_data = {}
+            for plat in platforms:
+                r = _to_platform(albedo, plat, flx_slr=flx_slr)
+                pfx = "{}_".format(plat) if prefix else ""
+                for name in r.band_names:
+                    band_data["{}{}".format(pfx, name)] = getattr(r, name)
+                for name in r.index_names:
+                    band_data["{}{}".format(pfx, name)] = getattr(r, name)
+            rows.append(band_data)
+
+        band_df = pd.DataFrame(rows, index=self.index)
+        return pd.concat([self, band_df], axis=1)
 
 # Regex for impurity concentration keys like "impurity.0.conc"
 _IMPURITY_CONC_RE = re.compile(r"^impurity\.(\d+)\.conc$")
@@ -69,7 +130,9 @@ def parameter_sweep(
         progress: If True, display a tqdm progress bar.
 
     Returns:
-        :class:`pandas.DataFrame` with one row per parameter combination.
+        :class:`SweepResult` (a DataFrame subclass) with one row per
+        parameter combination.  Call ``.to_platform("sentinel2")`` on the
+        result to append band-convolved albedo columns.
 
     Raises:
         ValueError: If an unrecognised parameter key is supplied.
@@ -109,6 +172,7 @@ def parameter_sweep(
             pass
 
     results = []
+    spectral = []
     for combo in iterator:
         combo_dict = dict(zip(keys, combo))
 
@@ -122,16 +186,21 @@ def parameter_sweep(
         )
         outputs = solve(tau, ssa, g, L_snw, ice, illumination, model_config, rt_config)
 
+        # Always capture spectral data for .to_platform() chaining
+        spectral.append((np.array(outputs.albedo), np.array(outputs.flx_slr)))
+
         # Collect results
         row = dict(combo_dict)
         for attr in _OUTPUT_SCALARS:
             row[attr] = getattr(outputs, attr)
         if return_spectral:
-            row["albedo"] = np.array(outputs.albedo)
-            row["flx_slr"] = np.array(outputs.flx_slr)
+            row["albedo"] = spectral[-1][0]
+            row["flx_slr"] = spectral[-1][1]
         results.append(row)
 
-    return pd.DataFrame(results)
+    result = SweepResult(results)
+    result._spectral = spectral
+    return result
 
 
 def _validate_keys(params):

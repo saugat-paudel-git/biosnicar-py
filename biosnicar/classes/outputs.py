@@ -32,3 +32,16 @@ class Outputs:
         self.abs_nir_tot = None
         self.absorbed_flux_per_layer = None
         self.flx_slr = None
+
+    def to_platform(self, platform):
+        """Convolve spectral albedo onto platform bands.
+
+        Args:
+            platform: Platform key (e.g. ``"sentinel2"``, ``"cesm2band"``).
+
+        Returns:
+            :class:`~biosnicar.bands.BandResult`
+        """
+        from biosnicar.bands import to_platform as _to_platform
+
+        return _to_platform(self.albedo, platform, flx_slr=self.flx_slr)

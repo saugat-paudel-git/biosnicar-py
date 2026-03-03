@@ -132,20 +132,31 @@ python scripts/sweep_demo.py
 
 More complex applications of the model code, for example, model inversions, field/model comparisons etc are included under `/experiments`, with details provided in that module's own README.
 
-### Platform Band Convolution — `to_platform()`
+### Platform Band Convolution — `.to_platform()`
 
-BioSNICAR outputs 480-band spectral albedo, but satellites and climate models use coarser spectral windows. The `to_platform()` function maps the high-resolution spectrum onto platform-specific bands via SRF convolution (satellites) or flux-weighted interval averaging (GCMs):
+BioSNICAR outputs 480-band spectral albedo, but satellites and climate models use coarser spectral windows. The `.to_platform()` method maps the high-resolution spectrum onto platform-specific bands via SRF convolution (satellites) or flux-weighted interval averaging (GCMs). It chains directly onto `run_model()` and `parameter_sweep()`:
 
 ```python
 from biosnicar import run_model
-from biosnicar.bands import to_platform
 
-outputs = run_model(solzen=50, rds=1000)
-s2   = to_platform(outputs.albedo, "sentinel2",  flx_slr=outputs.flx_slr)
-cesm = to_platform(outputs.albedo, "cesm2band", flx_slr=outputs.flx_slr)
+# Single run → satellite bands
+s2 = run_model(solzen=50, rds=1000).to_platform("sentinel2")
+print(s2.B3, s2.NDSI)
 
-print(s2.B3, s2.NDSI)       # green-band albedo and snow index
-print(cesm.vis, cesm.nir)   # GCM radiation-scheme band albedos
+# Single run → GCM bands
+cesm = run_model(solzen=50).to_platform("cesm2band")
+print(cesm.vis, cesm.nir)
+```
+
+```python
+from biosnicar.drivers.sweep import parameter_sweep
+
+# Parameter sweep → band columns appended to DataFrame
+df = parameter_sweep(
+    params={"rds": [500, 1000], "solzen": [50, 60]},
+).to_platform("sentinel2")
+
+print(df[["rds", "solzen", "BBA", "B3", "NDSI"]])
 ```
 
 Supported platforms: `sentinel2`, `sentinel3`, `landsat8`, `modis`, `cesm2band`, `cesmrrtmg`, `mar`, `hadcm3`. Detailed documentation including band definitions, data provenance, spectral indices, and instructions for replacing the initial tophat SRFs with manufacturer curves is in [BANDS.md](BANDS.md).
