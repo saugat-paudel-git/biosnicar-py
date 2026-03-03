@@ -1171,7 +1171,7 @@ def get_outputs(illumination, albedo, model_config, L_snw, F_abs, F_btm_net):
     outputs.abs_slr_btm = np.sum(F_btm_net, axis=0)
     outputs.abs_vis_btm = np.sum(F_btm_net[0 : model_config.vis_max_idx], axis=0)
     outputs.abs_nir_btm = np.sum(
-        F_btm_net[model_config.vis_max_idx : model_config.nir_max_idx + 1], axis=0
+        F_btm_net[model_config.vis_max_idx : model_config.nir_max_idx], axis=0
     )
 
     # Spectrally-integrated VIS and NIR total snowpack absorption:

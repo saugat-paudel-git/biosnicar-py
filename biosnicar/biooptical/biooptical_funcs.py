@@ -266,7 +266,7 @@ def calculate_ssps(bio_optical_config, k_rescaled, wvl_rescaled, n_rescaled):
         # calculate cylinder dimensions
         diameter = 2 * r
         V = L * (np.pi * r**2)  # volume of cylinder in µm3
-        Reff = (V / ((4 / 3) * np.pi)) ** 1 / 3  # effective radius
+        Reff = (V / ((4 / 3) * np.pi)) ** (1 / 3)  # effective radius
         Area_total = 2 * (np.pi * r**2) + (2 * np.pi * r) * L
         Area = Area_total / 4  # projected area
         ar = diameter / L  # aspect ratio
