@@ -45,20 +45,20 @@ def plot_albedo(plot_config, model_config, albedo):
     return
 
 
-def display_out_data(outputs):
-    print("\n** OUTPUT DATA **")
-    print("Broadband albedo: ", np.round(outputs.BBA, 4))
+# def display_out_data(outputs):
+#     print("\n** OUTPUT DATA **")
+#     print("Broadband albedo: ", np.round(outputs.BBA, 4))
 
-    I2DBA, I3DBA, NDCI, MCI, II = calculate_band_ratios(outputs.albedo)
+#     I2DBA, I3DBA, NDCI, MCI, II = calculate_band_ratios(outputs.albedo)
 
-    print("\nBAND RATIO INDEX VALUES")
-    print("2DBA Index: ", I2DBA)
-    print("3DBA index: ", I3DBA)
-    print("NDCI index: ", NDCI)
-    print("MCI index: ", MCI)
-    print("Impurity Index: ", II)
+#     print("\nBAND RATIO INDEX VALUES")
+#     print("2DBA Index: ", I2DBA)
+#     print("3DBA index: ", I3DBA)
+#     print("NDCI index: ", NDCI)
+#     print("MCI index: ", MCI)
+#     print("Impurity Index: ", II)
 
-    return
+#     return
 
 
 def calculate_band_ratios(albedo):

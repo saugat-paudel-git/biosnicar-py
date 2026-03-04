@@ -1189,6 +1189,9 @@ def get_outputs(illumination, albedo, model_config, L_snw, F_abs, F_btm_net):
     # Spectrally-integrated absorption by each layer
     outputs.absorbed_flux_per_layer = F_abs_slr
 
+    # Spectral solar flux (for downstream band convolution)
+    outputs.flx_slr = illumination.flx_slr.copy()
+
     return outputs
 
 

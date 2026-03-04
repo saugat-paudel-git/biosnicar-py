@@ -20,10 +20,10 @@ def test_single_param_sweep_shape():
 def test_multi_param_sweep_shape():
     """Multi-parameter sweep returns rows = product of lengths."""
     df = parameter_sweep(
-        params={"solzen": [30, 50], "rds": [200, 500]},
+        params={"solzen": [30, 50, 60], "rds": [200, 500, 600]},
         progress=False,
     )
-    assert len(df) == 4  # 2 x 2
+    assert len(df) == 9  # 3 x 3
     assert set(df.columns) >= {"solzen", "rds", "BBA", "BBAVIS", "BBANIR"}
 
 
@@ -103,3 +103,54 @@ def test_adding_doubling_solver():
     )
     assert len(df) == 2
     assert all(0 < b < 1 for b in df["BBA"])
+
+
+# ── SweepResult.to_platform() tests ─────────────────────────────────
+
+
+def test_to_platform_single():
+    """Single platform appends unprefixed band columns."""
+    df = parameter_sweep(
+        params={"solzen": [50]},
+        progress=False,
+    ).to_platform("sentinel2")
+    # Band columns should be present without prefix
+    assert "B3" in df.columns
+    assert "NDSI" in df.columns
+    # Original sweep columns preserved
+    assert "solzen" in df.columns
+    assert "BBA" in df.columns
+
+
+def test_to_platform_multi_prefix():
+    """Multiple platforms produce prefixed band columns."""
+    df = parameter_sweep(
+        params={"solzen": [50]},
+        progress=False,
+    ).to_platform("sentinel2", "modis")
+    assert "sentinel2_B3" in df.columns
+    assert "sentinel2_NDSI" in df.columns
+    assert "modis_B1" in df.columns
+    assert "modis_NDSI" in df.columns
+
+
+def test_to_platform_physical_values():
+    """Band albedo values should be in the physical range [0, 1]."""
+    df = parameter_sweep(
+        params={"rds": [500, 1000]},
+        progress=False,
+    ).to_platform("sentinel2")
+    for col in ["B3", "B4", "B8", "B11"]:
+        vals = df[col].values
+        assert all(0 <= v <= 1 for v in vals), f"{col} out of range: {vals}"
+
+
+def test_to_platform_cesm():
+    """GCM platform (cesm2band) works via sweep chaining."""
+    df = parameter_sweep(
+        params={"solzen": [50]},
+        progress=False,
+    ).to_platform("cesm2band")
+    assert "vis" in df.columns
+    assert "nir" in df.columns
+    assert 0 < df.iloc[0]["vis"] < 1

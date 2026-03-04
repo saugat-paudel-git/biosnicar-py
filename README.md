@@ -132,6 +132,35 @@ python scripts/sweep_demo.py
 
 More complex applications of the model code, for example, model inversions, field/model comparisons etc are included under `/experiments`, with details provided in that module's own README.
 
+### Platform Band Convolution — `.to_platform()`
+
+BioSNICAR outputs 480-band spectral albedo, but satellites and climate models use coarser spectral windows. The `.to_platform()` method maps the high-resolution spectrum onto platform-specific bands via SRF convolution (satellites) or flux-weighted interval averaging (GCMs). It chains directly onto `run_model()` and `parameter_sweep()`:
+
+```python
+from biosnicar import run_model
+
+# Single run → satellite bands
+s2 = run_model(solzen=50, rds=1000).to_platform("sentinel2")
+print(s2.B3, s2.NDSI)
+
+# Single run → GCM bands
+cesm = run_model(solzen=50).to_platform("cesm2band")
+print(cesm.vis, cesm.nir)
+```
+
+```python
+from biosnicar.drivers.sweep import parameter_sweep
+
+# Parameter sweep → band columns appended to DataFrame
+df = parameter_sweep(
+    params={"rds": [500, 1000], "solzen": [50, 60]},
+).to_platform("sentinel2")
+
+print(df[["rds", "solzen", "BBA", "B3", "NDSI"]])
+```
+
+Supported platforms: `sentinel2`, `sentinel3`, `landsat8`, `modis`, `cesm2band`, `cesmrrtmg`, `mar`, `hadcm3`. Detailed documentation including band definitions, data provenance, spectral indices, and instructions for replacing the initial tophat SRFs with manufacturer curves is in [BANDS.md](BANDS.md).
+
 We have also maintained a separate version of the biosnicar codebase that uses a "functional" programming style rather than the object-oriented approach taken here. We refer to this as biosnicar Classic and it is available in the `classic` branch of this repository. it might be useful for people already familiar with FORTRAN or Matlab implementations from previous literature. The two branches are entirely equivalent in their simulations but very different in their programming style. The object-oriented approach is preferred because it is more Pythonic, more flexible and easier to debug.
 
 #### Choosing Inputs

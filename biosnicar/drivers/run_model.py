@@ -18,7 +18,7 @@ from biosnicar.drivers.setup_snicar import setup_snicar
 from biosnicar.optical_properties.column_OPs import get_layer_OPs, mix_in_impurities
 from biosnicar.rt_solvers.adding_doubling_solver import adding_doubling_solver
 from biosnicar.rt_solvers.toon_rt_solver import toon_solver
-from biosnicar.utils.display import display_out_data, plot_albedo
+from biosnicar.utils.display import plot_albedo
 from biosnicar.utils.validate_inputs import validate_inputs
 
 # Regex for impurity concentration keys like "impurity_0_conc"
@@ -132,7 +132,6 @@ def run_model(
 
     if plot:
         plot_albedo(plot_config, model_config, outputs.albedo)
-    display_out_data(outputs)
 
     return outputs
 
