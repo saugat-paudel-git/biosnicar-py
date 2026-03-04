@@ -1,18 +1,18 @@
-"""Inverse modelling for BioSNICAR: MLP emulator + spectral retrieval.
+"""Inverse modelling for BioSNICAR: emulator-based spectral retrieval.
 
-Provides a fast neural-network emulator of the BioSNICAR forward model and
-optimisation routines to retrieve ice physical properties from observed
-spectral or satellite-band albedo.
+Provides optimisation routines to retrieve ice physical properties from
+observed spectral or satellite-band albedo using an :class:`Emulator`.
 
 Quick start
 -----------
->>> from biosnicar.inverse import Emulator, retrieve
+>>> from biosnicar.emulator import Emulator
+>>> from biosnicar.inverse import retrieve
 >>> emu = Emulator.load("glacier_ice.npz")
 >>> result = retrieve(observed=obs, parameters=["rds", "rho"], emulator=emu)
 >>> print(result.summary())
 """
 
-from biosnicar.inverse.emulator import Emulator
+from biosnicar.emulator import Emulator  # re-export for convenience
 from biosnicar.inverse.optimize import retrieve, DEFAULT_BOUNDS, DEFAULT_X0
 from biosnicar.inverse.result import RetrievalResult
 
