@@ -21,12 +21,13 @@ Example usage::
 
 import itertools
 import re
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from biosnicar.drivers.setup_snicar import setup_snicar
+from biosnicar.drivers.setup_snicar import setup_snicar, get_impurity_names
 from biosnicar.optical_properties.column_OPs import get_layer_OPs, mix_in_impurities
 from biosnicar.rt_solvers.adding_doubling_solver import adding_doubling_solver
 from biosnicar.rt_solvers.toon_rt_solver import toon_solver
@@ -87,7 +88,7 @@ class SweepResult(pd.DataFrame):
         band_df = pd.DataFrame(rows, index=self.index)
         return pd.concat([self, band_df], axis=1)
 
-# Regex for impurity concentration keys like "impurity.0.conc"
+# Legacy regex for impurity concentration keys like "impurity.0.conc"
 _IMPURITY_CONC_RE = re.compile(r"^impurity\.(\d+)\.conc$")
 
 # Parameter keys that require recalculating irradiance
@@ -122,7 +123,8 @@ def parameter_sweep(
     Args:
         params: Dict mapping parameter names to lists of values.
             Supported keys: ``solzen``, ``direct``, ``incoming``, ``rds``,
-            ``rho``, ``dz``, ``layer_type``, ``impurity.{i}.conc``.
+            ``rho``, ``dz``, ``layer_type``, and impurity names
+            (``black_carbon``, ``snow_algae``, ``glacier_algae``).
         solver: ``"adding-doubling"`` (default) or ``"toon"``.
         input_file: Path to YAML config or ``"default"``.
         return_spectral: If True, include an ``albedo`` column with 480-element
@@ -137,7 +139,7 @@ def parameter_sweep(
     Raises:
         ValueError: If an unrecognised parameter key is supplied.
     """
-    _validate_keys(params)
+    _validate_keys(params, input_file)
 
     # Resolve "default" to actual path so it can be reused in recalculations
     if input_file == "default":
@@ -203,16 +205,25 @@ def parameter_sweep(
     return result
 
 
-def _validate_keys(params):
+def _validate_keys(params, input_file="default"):
     """Raise ValueError for any unrecognised parameter key."""
+    imp_names = set(get_impurity_names(input_file))
     for key in params:
         if key in _VALID_KEYS:
             continue
+        if key in imp_names:
+            continue
         if _IMPURITY_CONC_RE.match(key):
+            warnings.warn(
+                f"{key!r} is deprecated; use the impurity name directly "
+                f"(available: {sorted(imp_names)}).",
+                DeprecationWarning,
+                stacklevel=3,
+            )
             continue
         raise ValueError(
             f"Unknown parameter key {key!r}. Supported keys: "
-            f"{sorted(_VALID_KEYS)} and 'impurity.{{i}}.conc'."
+            f"{sorted(_VALID_KEYS)} and impurity names {sorted(imp_names)}."
         )
 
 
@@ -220,6 +231,9 @@ def _apply_params(combo_dict, ice, illumination, impurities, input_file):
     """Mutate model objects in-place according to a single parameter combination."""
     needs_irradiance = False
     needs_refractive = False
+
+    # Build name→index mapping from impurities list
+    imp_name_map = {imp.name: i for i, imp in enumerate(impurities)}
 
     for key, value in combo_dict.items():
         # Illumination scalars
@@ -239,7 +253,12 @@ def _apply_params(combo_dict, ice, illumination, impurities, input_file):
             setattr(ice, key, broadcast)
             needs_refractive = True
 
-        # Impurity concentration
+        # Named impurity keys (e.g. black_carbon, glacier_algae)
+        elif key in imp_name_map:
+            idx = imp_name_map[key]
+            impurities[idx].conc = [value] * ice.nbr_lyr
+
+        # Legacy impurity.0.conc syntax (deprecated)
         else:
             m = _IMPURITY_CONC_RE.match(key)
             if m:
