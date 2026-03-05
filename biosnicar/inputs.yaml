@@ -50,28 +50,31 @@ PATHS:
 
 
 IMPURITIES:
-  BC:
-    NAME: "bc"
+  black_carbon:
     FILE: "bc_ChCB_rn40_dns1270.npz"
     CFACTOR: 1
     COATED: False
     UNIT: 0
     CONC: [0 ,0]
-  
-  SA:
-    NAME: "sa"
+
+  snow_algae:
     FILE: "snow_algae_empirical_Chevrollier2023.npz"
     COATED: False
     UNIT: 1
-    CONC: [40000 ,0]  
+    CONC: [40000 ,0]
 
-  GA:
-    NAME: "ga"
+  glacier_algae:
     FILE: "ice_algae_empirical_Chevrollier2023.npz"
     COATED: False
     UNIT: 1
     CONC: [0 ,0]
 
+  dust:
+    FILE: "dust_greenland_Cook_CENTRAL_20190911.npz"
+    COATED: False
+    UNIT: 0
+    CONC: [0 ,0]
+    
 PLOT:
     FIG_SIZE: (8,6)
     FACECOLOR: "white"
@@ -132,4 +135,3 @@ BIOOPTICAL:
     SAVE_TO_LAP: False
     IMPURITY_STEM: "alg"
     INFO: "info"
-
