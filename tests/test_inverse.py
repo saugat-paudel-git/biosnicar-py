@@ -22,9 +22,9 @@ class TestRetrievalResult:
     @pytest.fixture
     def basic_result(self):
         return RetrievalResult(
-            best_fit={"rds": 800.0, "impurity_0_conc": 5000.0},
+            best_fit={"rds": 800.0, "black_carbon": 5000.0},
             cost=0.0012,
-            uncertainty={"rds": 25.0, "impurity_0_conc": 120.0},
+            uncertainty={"rds": 25.0, "black_carbon": 120.0},
             predicted_albedo=np.full(480, 0.5),
             observed=np.full(480, 0.5),
             converged=True,
@@ -137,7 +137,7 @@ def tiny_emulator():
     is built once and shared across all tests in this class.
     """
     emu = Emulator.build(
-        params={"rds": (500, 3000), "impurity_0_conc": (0, 50000)},
+        params={"rds": (500, 3000), "black_carbon": (0, 50000)},
         n_samples=100,
         progress=False,
         seed=42,
@@ -151,12 +151,12 @@ class TestEmulatorBuild:
     """Tests for Emulator.build() and basic properties."""
 
     def test_param_names(self, tiny_emulator):
-        assert tiny_emulator.param_names == ["rds", "impurity_0_conc"]
+        assert tiny_emulator.param_names == ["rds", "black_carbon"]
 
     def test_bounds(self, tiny_emulator):
         b = tiny_emulator.bounds
         assert b["rds"] == (500.0, 3000.0)
-        assert b["impurity_0_conc"] == (0.0, 50000.0)
+        assert b["black_carbon"] == (0.0, 50000.0)
 
     def test_n_pca_components(self, tiny_emulator):
         assert tiny_emulator.n_pca_components > 0
@@ -173,18 +173,18 @@ class TestEmulatorBuild:
     def test_repr(self, tiny_emulator):
         r = repr(tiny_emulator)
         assert "rds" in r
-        assert "impurity_0_conc" in r
+        assert "black_carbon" in r
 
 
 class TestEmulatorPredict:
     """Tests for Emulator.predict() and predict_batch()."""
 
     def test_predict_shape(self, tiny_emulator):
-        alb = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        alb = tiny_emulator.predict(rds=1000, black_carbon=5000)
         assert alb.shape == (480,)
 
     def test_predict_physical_range(self, tiny_emulator):
-        alb = tiny_emulator.predict(rds=1000, impurity_0_conc=0)
+        alb = tiny_emulator.predict(rds=1000, black_carbon=0)
         assert np.all(alb >= 0.0)
         assert np.all(alb <= 1.0)
 
@@ -194,7 +194,7 @@ class TestEmulatorPredict:
         assert result.shape == (2, 480)
 
     def test_predict_batch_matches_single(self, tiny_emulator):
-        single = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        single = tiny_emulator.predict(rds=1000, black_carbon=5000)
         batch = tiny_emulator.predict_batch(np.array([[1000, 5000]]))
         np.testing.assert_allclose(single, batch[0], atol=1e-10)
 
@@ -204,12 +204,12 @@ class TestEmulatorPredict:
 
     def test_out_of_bounds_warns(self, tiny_emulator):
         with pytest.warns(UserWarning, match="outside training bounds"):
-            tiny_emulator.predict(rds=10000, impurity_0_conc=5000)
+            tiny_emulator.predict(rds=10000, black_carbon=5000)
 
     def test_impurity_increases_darken_spectrum(self, tiny_emulator):
         """More impurities should produce lower albedo (at least broadband)."""
-        clean = tiny_emulator.predict(rds=1000, impurity_0_conc=0)
-        dirty = tiny_emulator.predict(rds=1000, impurity_0_conc=40000)
+        clean = tiny_emulator.predict(rds=1000, black_carbon=0)
+        dirty = tiny_emulator.predict(rds=1000, black_carbon=40000)
         assert np.mean(clean) > np.mean(dirty)
 
 
@@ -235,8 +235,8 @@ class TestEmulatorSaveLoad:
             tiny_emulator.save(path)
             loaded = Emulator.load(path)
 
-            original = tiny_emulator.predict(rds=1500, impurity_0_conc=10000)
-            reloaded = loaded.predict(rds=1500, impurity_0_conc=10000)
+            original = tiny_emulator.predict(rds=1500, black_carbon=10000)
+            reloaded = loaded.predict(rds=1500, black_carbon=10000)
             np.testing.assert_allclose(original, reloaded, atol=1e-10)
 
     def test_flx_slr_preserved(self, tiny_emulator):
@@ -265,7 +265,7 @@ class TestSpectralCost:
         observed = np.full(480, 0.5)
         cost = spectral_cost(
             params=[1000, 5000],
-            param_names=["rds", "impurity_0_conc"],
+            param_names=["rds", "black_carbon"],
             observed=observed,
             forward_fn=self._make_forward_fn(0.0),
         )
@@ -275,7 +275,7 @@ class TestSpectralCost:
         observed = np.full(480, 0.5)
         cost = spectral_cost(
             params=[1000, 5000],
-            param_names=["rds", "impurity_0_conc"],
+            param_names=["rds", "black_carbon"],
             observed=observed,
             forward_fn=self._make_forward_fn(0.1),
         )
@@ -335,7 +335,7 @@ class TestBandCost:
     def test_zero_cost_perfect_match(self, tiny_emulator):
         """Band cost should be zero when prediction matches observation."""
         # Generate a prediction, then use it as the observation
-        predicted = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        predicted = tiny_emulator.predict(rds=1000, black_carbon=5000)
         flx_slr = tiny_emulator.flx_slr
 
         from biosnicar.bands import to_platform
@@ -344,7 +344,7 @@ class TestBandCost:
 
         cost = band_cost(
             params=[1000, 5000],
-            param_names=["rds", "impurity_0_conc"],
+            param_names=["rds", "black_carbon"],
             observed=observed_bands,
             observed_band_names=["B3", "B4", "B11"],
             forward_fn=tiny_emulator.predict,
@@ -355,7 +355,7 @@ class TestBandCost:
 
     def test_positive_cost_mismatch(self, tiny_emulator):
         """Band cost should be positive when parameters differ."""
-        predicted = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        predicted = tiny_emulator.predict(rds=1000, black_carbon=5000)
         flx_slr = tiny_emulator.flx_slr
 
         from biosnicar.bands import to_platform
@@ -365,7 +365,7 @@ class TestBandCost:
         # Evaluate cost at a different point
         cost = band_cost(
             params=[2000, 20000],
-            param_names=["rds", "impurity_0_conc"],
+            param_names=["rds", "black_carbon"],
             observed=observed_bands,
             observed_band_names=["B3", "B4", "B11"],
             forward_fn=tiny_emulator.predict,
@@ -376,7 +376,7 @@ class TestBandCost:
 
     def test_band_cost_with_uncertainty(self, tiny_emulator):
         """Uncertainty weighting should change the cost value."""
-        predicted = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        predicted = tiny_emulator.predict(rds=1000, black_carbon=5000)
         flx_slr = tiny_emulator.flx_slr
 
         from biosnicar.bands import to_platform
@@ -386,7 +386,7 @@ class TestBandCost:
         # Cost with tight uncertainty should differ from unweighted
         cost_unweighted = band_cost(
             params=[2000, 20000],
-            param_names=["rds", "impurity_0_conc"],
+            param_names=["rds", "black_carbon"],
             observed=observed_bands,
             observed_band_names=["B3", "B4", "B11"],
             forward_fn=tiny_emulator.predict,
@@ -395,7 +395,7 @@ class TestBandCost:
         )
         cost_weighted = band_cost(
             params=[2000, 20000],
-            param_names=["rds", "impurity_0_conc"],
+            param_names=["rds", "black_carbon"],
             observed=observed_bands,
             observed_band_names=["B3", "B4", "B11"],
             forward_fn=tiny_emulator.predict,
@@ -415,13 +415,13 @@ class TestRetrieve:
     def test_spectral_roundtrip_single_param(self, tiny_emulator):
         """Retrieve rds from emulator-generated spectrum."""
         true_rds = 1500
-        obs = tiny_emulator.predict(rds=true_rds, impurity_0_conc=0)
+        obs = tiny_emulator.predict(rds=true_rds, black_carbon=0)
 
         result = retrieve(
             observed=obs,
             parameters=["rds"],
             emulator=tiny_emulator,
-            fixed_params={"impurity_0_conc": 0},
+            fixed_params={"black_carbon": 0},
         )
         assert result.converged
         assert abs(result.best_fit["rds"] - true_rds) < 200
@@ -429,39 +429,39 @@ class TestRetrieve:
         assert result.method == "L-BFGS-B"
 
     def test_spectral_roundtrip_two_params(self, tiny_emulator):
-        """Retrieve rds + impurity_0_conc from emulator spectrum."""
+        """Retrieve rds + black_carbon from emulator spectrum."""
         true_rds = 1500
         true_bc = 10000
-        obs = tiny_emulator.predict(rds=true_rds, impurity_0_conc=true_bc)
+        obs = tiny_emulator.predict(rds=true_rds, black_carbon=true_bc)
 
         result = retrieve(
             observed=obs,
-            parameters=["rds", "impurity_0_conc"],
+            parameters=["rds", "black_carbon"],
             emulator=tiny_emulator,
         )
         # With a tiny emulator (100 samples) the 2-param fit may not
         # recover exact values, but should produce a valid result
         assert result.predicted_albedo.shape == (480,)
         assert "rds" in result.best_fit
-        assert "impurity_0_conc" in result.best_fit
+        assert "black_carbon" in result.best_fit
         assert result.n_function_evals > 0
 
     def test_uncertainty_is_finite(self, tiny_emulator):
         """Uncertainty should be finite and positive for well-constrained params."""
-        obs = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        obs = tiny_emulator.predict(rds=1000, black_carbon=5000)
         result = retrieve(
             observed=obs,
-            parameters=["rds", "impurity_0_conc"],
+            parameters=["rds", "black_carbon"],
             emulator=tiny_emulator,
         )
-        for name in ["rds", "impurity_0_conc"]:
+        for name in ["rds", "black_carbon"]:
             unc = result.uncertainty[name]
             assert np.isfinite(unc), f"{name} uncertainty is not finite"
             assert unc > 0, f"{name} uncertainty should be positive"
 
     def test_band_mode_sentinel2(self, tiny_emulator):
         """Retrieve from Sentinel-2 band values."""
-        predicted = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        predicted = tiny_emulator.predict(rds=1000, black_carbon=5000)
         flx_slr = tiny_emulator.flx_slr
 
         from biosnicar.bands import to_platform
@@ -470,7 +470,7 @@ class TestRetrieve:
 
         result = retrieve(
             observed=obs_bands,
-            parameters=["rds", "impurity_0_conc"],
+            parameters=["rds", "black_carbon"],
             emulator=tiny_emulator,
             platform="sentinel2",
             observed_band_names=["B3", "B4", "B11"],
@@ -480,24 +480,24 @@ class TestRetrieve:
 
     def test_fixed_params(self, tiny_emulator):
         """fixed_params should not appear in best_fit."""
-        obs = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        obs = tiny_emulator.predict(rds=1000, black_carbon=5000)
         result = retrieve(
             observed=obs,
             parameters=["rds"],
             emulator=tiny_emulator,
-            fixed_params={"impurity_0_conc": 5000},
+            fixed_params={"black_carbon": 5000},
         )
         assert "rds" in result.best_fit
-        assert "impurity_0_conc" not in result.best_fit
+        assert "black_carbon" not in result.best_fit
 
     def test_differential_evolution(self, tiny_emulator):
         """Differential evolution should converge."""
-        obs = tiny_emulator.predict(rds=1500, impurity_0_conc=5000)
+        obs = tiny_emulator.predict(rds=1500, black_carbon=5000)
         result = retrieve(
             observed=obs,
             parameters=["rds"],
             emulator=tiny_emulator,
-            fixed_params={"impurity_0_conc": 5000},
+            fixed_params={"black_carbon": 5000},
             method="differential_evolution",
         )
         assert result.converged
@@ -506,12 +506,12 @@ class TestRetrieve:
 
     def test_nelder_mead(self, tiny_emulator):
         """Nelder-Mead should run and produce a result."""
-        obs = tiny_emulator.predict(rds=1500, impurity_0_conc=5000)
+        obs = tiny_emulator.predict(rds=1500, black_carbon=5000)
         result = retrieve(
             observed=obs,
             parameters=["rds"],
             emulator=tiny_emulator,
-            fixed_params={"impurity_0_conc": 5000},
+            fixed_params={"black_carbon": 5000},
             method="Nelder-Mead",
         )
         assert result.method == "Nelder-Mead"
@@ -537,15 +537,15 @@ class TestRetrieve:
 
     def test_summary_output(self, tiny_emulator):
         """result.summary() should return a non-empty string."""
-        obs = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        obs = tiny_emulator.predict(rds=1000, black_carbon=5000)
         result = retrieve(
             observed=obs,
-            parameters=["rds", "impurity_0_conc"],
+            parameters=["rds", "black_carbon"],
             emulator=tiny_emulator,
         )
         s = result.summary()
         assert "rds" in s
-        assert "impurity_0_conc" in s
+        assert "black_carbon" in s
         assert "L-BFGS-B" in s
 
     def test_direct_forward_fn_mode(self, tiny_emulator):
@@ -554,7 +554,7 @@ class TestRetrieve:
         true_rds = 1500
 
         def my_forward(rds):
-            return tiny_emulator.predict(rds=rds, impurity_0_conc=0)
+            return tiny_emulator.predict(rds=rds, black_carbon=0)
 
         obs = my_forward(rds=true_rds)
         result = retrieve(
@@ -577,33 +577,33 @@ class TestRunEmulator:
         """run_emulator should return an Outputs object."""
         from biosnicar.classes.outputs import Outputs
 
-        outputs = run_emulator(tiny_emulator, rds=1000, impurity_0_conc=5000)
+        outputs = run_emulator(tiny_emulator, rds=1000, black_carbon=5000)
         assert isinstance(outputs, Outputs)
 
     def test_albedo_shape(self, tiny_emulator):
-        outputs = run_emulator(tiny_emulator, rds=1000, impurity_0_conc=5000)
+        outputs = run_emulator(tiny_emulator, rds=1000, black_carbon=5000)
         assert outputs.albedo.shape == (480,)
 
     def test_bba_is_scalar(self, tiny_emulator):
-        outputs = run_emulator(tiny_emulator, rds=1000, impurity_0_conc=5000)
+        outputs = run_emulator(tiny_emulator, rds=1000, black_carbon=5000)
         assert isinstance(outputs.BBA, float)
         assert 0.0 < outputs.BBA < 1.0
 
     def test_bbavis_and_bbanir(self, tiny_emulator):
-        outputs = run_emulator(tiny_emulator, rds=1000, impurity_0_conc=5000)
+        outputs = run_emulator(tiny_emulator, rds=1000, black_carbon=5000)
         assert isinstance(outputs.BBAVIS, float)
         assert isinstance(outputs.BBANIR, float)
         assert 0.0 < outputs.BBAVIS < 1.0
         assert 0.0 < outputs.BBANIR < 1.0
 
     def test_flx_slr_populated(self, tiny_emulator):
-        outputs = run_emulator(tiny_emulator, rds=1000, impurity_0_conc=5000)
+        outputs = run_emulator(tiny_emulator, rds=1000, black_carbon=5000)
         assert outputs.flx_slr is not None
         assert len(outputs.flx_slr) == 480
 
     def test_to_platform_works(self, tiny_emulator):
         """Outputs.to_platform() should work with emulator output."""
-        outputs = run_emulator(tiny_emulator, rds=1000, impurity_0_conc=5000)
+        outputs = run_emulator(tiny_emulator, rds=1000, black_carbon=5000)
         s2 = outputs.to_platform("sentinel2")
         assert hasattr(s2, "B3")
         assert hasattr(s2, "B4")
@@ -611,13 +611,13 @@ class TestRunEmulator:
 
     def test_matches_raw_predict(self, tiny_emulator):
         """Albedo from run_emulator should match emulator.predict."""
-        outputs = run_emulator(tiny_emulator, rds=1000, impurity_0_conc=5000)
-        raw = tiny_emulator.predict(rds=1000, impurity_0_conc=5000)
+        outputs = run_emulator(tiny_emulator, rds=1000, black_carbon=5000)
+        raw = tiny_emulator.predict(rds=1000, black_carbon=5000)
         np.testing.assert_allclose(outputs.albedo, raw, atol=1e-10)
 
     def test_non_rt_fields_are_none(self, tiny_emulator):
         """Fields only produced by the full RT solver should be None."""
-        outputs = run_emulator(tiny_emulator, rds=1000, impurity_0_conc=5000)
+        outputs = run_emulator(tiny_emulator, rds=1000, black_carbon=5000)
         assert outputs.heat_rt is None
         assert outputs.absorbed_flux_per_layer is None
 
