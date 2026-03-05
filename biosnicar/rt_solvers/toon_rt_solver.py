@@ -163,6 +163,10 @@ def toon_solver(tau, ssa, g, L_snw, ice, illumination, model_config, rt_config):
     if model_config.smooth:
         outputs.albedo = apply_smoothing_function(outputs.albedo, model_config)
 
+    import numpy as np
+
+    outputs.albedo = np.clip(outputs.albedo, 0.0, 1.0)
+
     return outputs
 
 

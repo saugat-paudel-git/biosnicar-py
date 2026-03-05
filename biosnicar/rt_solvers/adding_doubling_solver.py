@@ -239,6 +239,12 @@ def adding_doubling_solver(tau, ssa, g, L_snw, ice, illumination, model_config):
     if model_config.smooth:
         outputs.albedo = apply_smoothing_function(outputs.albedo, model_config)
 
+    # Final clamp to [0, 1].  The two-stream approximation can produce
+    # slightly unphysical albedo in bands with extreme optical depth
+    # and negligible solar flux (~2.85-3.15 um, >4.5 um), and the
+    # Savitzky-Golay smoothing filter can amplify these overshoots.
+    outputs.albedo = np.clip(outputs.albedo, 0.0, 1.0)
+
     return outputs
 
 
@@ -1088,6 +1094,11 @@ def calculate_fluxes(
         )
 
     albedo = F_up[:, 0] / F_dwn[:, 0]
+
+    # Clamp to [0, 1].  Residual numerical noise from the two-stream
+    # approximation can produce albedo slightly outside [0, 1] in bands
+    # with negligible solar flux and extreme ice absorption.
+    albedo = np.clip(albedo, 0.0, 1.0)
 
     return albedo, F_abs, F_btm_net, F_top_pls
 
