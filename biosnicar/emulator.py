@@ -55,7 +55,11 @@ _BINARY_PARAMS = {"direct"}
 # Parameters that require integer rounding before passing to run_model.
 # The optical-property lookup tables use integer keys (e.g. rds on a
 # 5/10/500 grid), so continuous LHS values must be snapped.
-_INTEGER_PARAMS = {"rds"}
+_INTEGER_PARAMS = {"rds", "solzen"}
+
+# Valid solar zenith angles — irradiance data (fsds.npz) only contains
+# integer SZA keys from 0 to 89.  Validation enforces [1, 89].
+_SOLZEN_RANGE = (1, 89)
 
 
 def _snap_rds(value):
@@ -73,6 +77,110 @@ def _snap_rds(value):
         return int(round(v / 500) * 500)
 
 
+class VerificationResult:
+    """Results from :meth:`Emulator.verify`.
+
+    Attributes
+    ----------
+    n_points : int
+        Number of benchmark parameter sets tested.
+    mae_per_point : np.ndarray of shape (N,)
+        Mean absolute error (over 480 bands) for each test point.
+    max_err_per_point : np.ndarray of shape (N,)
+        Maximum absolute error (over 480 bands) for each test point.
+    bba_err_per_point : np.ndarray of shape (N,)
+        Absolute broadband-albedo error for each test point.
+    mae : float
+        Overall mean absolute spectral error across all points and bands.
+    max_err : float
+        Worst-case absolute error across all points and bands.
+    mae_bba : float
+        Mean absolute broadband-albedo error.
+    max_bba_err : float
+        Maximum absolute broadband-albedo error.
+    r2 : float
+        Coefficient of determination (R²) over all predicted vs reference
+        albedo values.
+    benchmark_params : list of dict
+        The parameter sets that were tested.
+    emulator_albedos : np.ndarray of shape (N, 480)
+        Emulator predictions for each benchmark point.
+    reference_albedos : np.ndarray of shape (N, 480)
+        Forward-model reference for each benchmark point (clamped to [0, 1]).
+    unphysical_indices : list of int
+        Indices of benchmark points where the forward model produced
+        unphysical albedo values (outside [0, 1]).  These are excluded
+        from aggregate error statistics.
+    physical_mask : np.ndarray of shape (N,)
+        Boolean mask — True for points with physical forward-model output.
+    n_physical : int
+        Number of benchmark points with physical forward-model output
+        (used for aggregate statistics).
+    """
+
+    def __init__(self, benchmark_params, emulator_albedos, reference_albedos,
+                 flx_slr, unphysical_indices=None, physical_mask=None):
+        self.benchmark_params = benchmark_params
+        self.emulator_albedos = emulator_albedos
+        self.reference_albedos = reference_albedos
+        self.n_points = len(benchmark_params)
+        self.unphysical_indices = unphysical_indices or []
+
+        if physical_mask is None:
+            physical_mask = np.ones(self.n_points, dtype=bool)
+        self.physical_mask = physical_mask
+        self.n_physical = int(np.sum(physical_mask))
+
+        # Per-point errors (computed for all points)
+        diff = np.abs(emulator_albedos - reference_albedos)
+        self.mae_per_point = np.mean(diff, axis=1)
+        self.max_err_per_point = np.max(diff, axis=1)
+
+        bba_emu = np.sum(flx_slr * emulator_albedos, axis=1) / np.sum(flx_slr)
+        bba_ref = np.sum(flx_slr * reference_albedos, axis=1) / np.sum(flx_slr)
+        self.bba_err_per_point = np.abs(bba_emu - bba_ref)
+
+        # Aggregate errors (only over physical points)
+        if self.n_physical > 0:
+            phys_diff = diff[physical_mask]
+            self.mae = float(np.mean(phys_diff))
+            self.max_err = float(np.max(phys_diff))
+            self.mae_bba = float(np.mean(self.bba_err_per_point[physical_mask]))
+            self.max_bba_err = float(np.max(self.bba_err_per_point[physical_mask]))
+
+            ref_flat = reference_albedos[physical_mask].ravel()
+            emu_flat = emulator_albedos[physical_mask].ravel()
+            ss_res = np.sum((ref_flat - emu_flat) ** 2)
+            ss_tot = np.sum((ref_flat - np.mean(ref_flat)) ** 2)
+            self.r2 = float(1 - ss_res / ss_tot) if ss_tot > 0 else 1.0
+        else:
+            self.mae = self.max_err = float("nan")
+            self.mae_bba = self.max_bba_err = float("nan")
+            self.r2 = float("nan")
+
+    def summary(self):
+        """Return a human-readable summary string."""
+        header = f"Emulator verification ({self.n_points} benchmark points"
+        if self.unphysical_indices:
+            header += f", {len(self.unphysical_indices)} excluded as unphysical"
+        header += ")"
+        lines = [
+            header,
+            f"  Spectral MAE:      {self.mae:.6f}",
+            f"  Spectral max err:  {self.max_err:.6f}",
+            f"  BBA MAE:           {self.mae_bba:.6f}",
+            f"  BBA max err:       {self.max_bba_err:.6f}",
+            f"  R²:                {self.r2:.8f}",
+        ]
+        return "\n".join(lines)
+
+    def __repr__(self):
+        return (
+            f"VerificationResult(n={self.n_points}, mae={self.mae:.6f}, "
+            f"r2={self.r2:.6f})"
+        )
+
+
 class Emulator:
     """Fast neural-network surrogate for the BioSNICAR forward model.
 
@@ -84,10 +192,10 @@ class Emulator:
     Examples
     --------
     >>> emu = Emulator.build(
-    ...     params={"rds": (100, 5000), "impurity_0_conc": (0, 50000)},
+    ...     params={"rds": (100, 5000), "black_carbon": (0, 50000)},
     ...     n_samples=500, solzen=50, progress=False,
     ... )
-    >>> albedo = emu.predict(rds=800, impurity_0_conc=5000)
+    >>> albedo = emu.predict(rds=800, black_carbon=5000)
     >>> emu.save("my_emulator.npz")
     >>> emu2 = Emulator.load("my_emulator.npz")
     """
@@ -148,7 +256,7 @@ class Emulator:
             ``{param_name: (min_value, max_value)}`` for each free
             parameter.  Any keyword accepted by ``run_model()`` can be
             used (e.g. ``rds``, ``rho``, ``solzen``, ``direct``,
-            ``impurity_0_conc``, etc.).
+            ``black_carbon``, ``glacier_algae``, etc.).
         n_samples : int
             Number of Latin hypercube training samples.  More samples
             improve accuracy but increase build time (~50 ms per sample).
@@ -223,6 +331,8 @@ class Emulator:
                     val = _snap_rds(val)
                 elif name in _BINARY_PARAMS:
                     val = int(val)
+                elif name == "solzen":
+                    val = int(np.clip(round(val), *_SOLZEN_RANGE))
                 elif name in _INTEGER_PARAMS:
                     val = int(round(val))
                 overrides[name] = val
@@ -234,6 +344,24 @@ class Emulator:
                 flx_slr_ref = np.array(outputs.flx_slr, dtype=np.float64)
 
         albedo_matrix = np.array(albedos)  # (n_samples, 480)
+
+        # Drop spectra with unphysical values.  The forward model
+        # occasionally produces negative albedos at specific pathological
+        # parameter combinations (numerical instability in the RT solver).
+        # Including them would distort the PCA basis and MLP training.
+        physical_mask = np.all(
+            (albedo_matrix >= 0) & (albedo_matrix <= 1.01), axis=1
+        )
+        n_unphysical = int(np.sum(~physical_mask))
+        if n_unphysical:
+            warnings.warn(
+                f"{n_unphysical} of {n_samples} training spectra had "
+                f"unphysical albedo values (outside [0, 1]) and were "
+                f"excluded from training.",
+                stacklevel=2,
+            )
+            albedo_matrix = albedo_matrix[physical_mask]
+            lhs_scaled = lhs_scaled[physical_mask]
 
         # --- 3. PCA compression ---
         pca = PCA(n_components=0.999)  # retain 99.9% variance
@@ -297,7 +425,7 @@ class Emulator:
         ----------
         **params
             Keyword arguments for each emulator parameter
-            (e.g. ``rds=800, impurity_0_conc=5000``).
+            (e.g. ``rds=800, black_carbon=5000``).
 
         Returns
         -------
@@ -365,6 +493,128 @@ class Emulator:
         # x is now PCA coefficients of shape (N, n_pca)
         albedo = x @ self._pca_components + self._pca_mean
         return np.clip(albedo, 0.0, 1.0)
+
+    # ── Verify ──────────────────────────────────────────────────────────
+
+    def verify(self, benchmark_params=None, n_points=20, seed=123,
+               input_file="default", progress=True):
+        """Measure emulator accuracy against the full forward model.
+
+        Runs both the emulator and ``run_model()`` for a suite of benchmark
+        parameter sets and computes error statistics.
+
+        Parameters
+        ----------
+        benchmark_params : list of dict, optional
+            Explicit parameter sets to test.  Each dict must contain all
+            emulator parameters (e.g. ``{"rds": 500, "black_carbon": 0}``).
+            If *None*, generates *n_points* stratified random points
+            spanning the training bounds.
+        n_points : int
+            Number of benchmark points to generate when *benchmark_params*
+            is not provided.  Ignored if *benchmark_params* is given.
+        seed : int
+            Random seed for benchmark generation.
+        input_file : str
+            YAML config path for ``run_model()``, or ``"default"``.
+        progress : bool
+            Show a progress bar for the forward-model calls.
+
+        Returns
+        -------
+        VerificationResult
+            Object with per-point and aggregate error metrics, plus
+            a ``.summary()`` method for pretty-printing.
+        """
+        from biosnicar.drivers.run_model import run_model
+
+        # --- Build benchmark parameter sets ---
+        if benchmark_params is None:
+            benchmark_params = self._generate_benchmark_params(n_points, seed)
+
+        n = len(benchmark_params)
+
+        # Get fixed overrides from build metadata
+        fixed = dict(self._metadata.get("fixed_overrides", {}))
+        solver = self._metadata.get("solver", "adding-doubling")
+
+        # --- Run emulator and forward model ---
+        emu_albedos = np.empty((n, 480))
+        ref_albedos = np.empty((n, 480))
+
+        iterator = range(n)
+        if progress:
+            try:
+                from tqdm import tqdm
+                iterator = tqdm(iterator, desc="Verifying emulator")
+            except ImportError:
+                pass
+
+        unphysical_indices = []
+
+        for i in iterator:
+            params = benchmark_params[i]
+
+            # Emulator prediction
+            emu_albedos[i] = self.predict(**params)
+
+            # Forward model reference
+            overrides = dict(fixed)
+            overrides.update(params)
+            outputs = run_model(input_file=input_file, solver=solver,
+                                **overrides)
+            raw = np.array(outputs.albedo, dtype=np.float64)
+
+            if np.any(raw < 0) or np.any(raw > 1.01):
+                unphysical_indices.append(i)
+            ref_albedos[i] = raw
+
+        # Exclude unphysical points from error statistics
+        physical_mask = np.ones(n, dtype=bool)
+        if unphysical_indices:
+            physical_mask[unphysical_indices] = False
+            warnings.warn(
+                f"Forward model produced unphysical albedo (outside [0, 1]) "
+                f"for {len(unphysical_indices)} of {n} benchmark points.  "
+                f"These have been excluded from error statistics.",
+                stacklevel=2,
+            )
+
+        return VerificationResult(
+            benchmark_params=benchmark_params,
+            emulator_albedos=emu_albedos,
+            reference_albedos=ref_albedos,
+            flx_slr=self._flx_slr,
+            unphysical_indices=unphysical_indices,
+            physical_mask=physical_mask,
+        )
+
+    def _generate_benchmark_params(self, n_points, seed):
+        """Generate stratified benchmark parameter sets within bounds."""
+        n_dims = len(self._param_names)
+        lhs = _latin_hypercube(n_points, n_dims, seed=seed)
+
+        lo = np.array([self._bounds[n][0] for n in self._param_names])
+        hi = np.array([self._bounds[n][1] for n in self._param_names])
+        scaled = lo + lhs * (hi - lo)
+
+        params_list = []
+        for i in range(n_points):
+            d = {}
+            for j, name in enumerate(self._param_names):
+                val = scaled[i, j]
+                if name == "rds":
+                    val = _snap_rds(val)
+                elif name in _BINARY_PARAMS:
+                    val = int(round(val))
+                elif name == "solzen":
+                    val = int(np.clip(round(val), *_SOLZEN_RANGE))
+                elif name in _INTEGER_PARAMS:
+                    val = int(round(val))
+                d[name] = val
+            params_list.append(d)
+
+        return params_list
 
     # ── Save / Load ───────────────────────────────────────────────────
 

@@ -10,7 +10,7 @@ Example::
     from biosnicar.drivers.run_emulator import run_emulator
 
     emu = Emulator.load("glacier_ice.npz")
-    outputs = run_emulator(emu, rds=1000, impurity_0_conc=500)
+    outputs = run_emulator(emu, rds=1000, black_carbon=500)
     print(outputs.BBA)
 """
 
@@ -37,7 +37,7 @@ def run_emulator(emulator, **params):
         :meth:`Emulator.load`).
     **params
         Keyword arguments for the emulator parameters
-        (e.g. ``rds=1000, impurity_0_conc=500``).  Must match the
+        (e.g. ``rds=1000, black_carbon=500``).  Must match the
         parameter names the emulator was built with.
 
     Returns
