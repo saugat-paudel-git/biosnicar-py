@@ -27,9 +27,9 @@ DEFAULT_BOUNDS = {
     "rho": (100.0, 917.0),
     "solzen": (20.0, 80.0),
     "direct": (0, 1),
-    "impurity_0_conc": (0.0, 100000.0),
-    "impurity_1_conc": (0.0, 500000.0),
-    "impurity_2_conc": (0.0, 100000.0),
+    "black_carbon": (0.0, 100000.0),
+    "snow_algae": (0.0, 500000.0),
+    "glacier_algae": (0.0, 100000.0),
 }
 
 DEFAULT_X0 = {
@@ -37,9 +37,9 @@ DEFAULT_X0 = {
     "rho": 500.0,
     "solzen": 50.0,
     "direct": 1,
-    "impurity_0_conc": 100.0,
-    "impurity_1_conc": 10000.0,
-    "impurity_2_conc": 100.0,
+    "black_carbon": 100.0,
+    "snow_algae": 10000.0,
+    "glacier_algae": 100.0,
 }
 
 
@@ -85,7 +85,7 @@ def retrieve(
         Observed albedo — 480-band spectral array or N-band satellite array.
     parameters : list of str
         Names of parameters to retrieve (e.g.
-        ``["rds", "impurity_0_conc"]``).
+        ``["rds", "black_carbon"]``).
     emulator : Emulator, optional
         Trained emulator for fast forward evaluation.
     forward_fn : callable, optional
