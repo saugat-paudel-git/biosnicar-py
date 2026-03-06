@@ -28,11 +28,11 @@ PLOT = True
 # Setup: load the emulator and generate a synthetic observation
 # ======================================================================
 
-# The pre-built default emulator covers 7 parameters (rds, rho,
-# black_carbon, dust, glacier_algae, direct, solzen) and was trained on
-# 150,000 LHS samples of solid ice (layer_type=1).  It predicts 480-band
-# spectral albedo in ~microseconds.
-emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
+# The pre-built default emulator covers 8 parameters (rds, rho,
+# black_carbon, snow_algae, glacier_algae, dust, direct, solzen) and was
+# trained on 50,000 LHS samples of solid ice (layer_type=1).  It predicts
+# 480-band spectral albedo in ~microseconds.
+emu = Emulator.load("data/emulators/glacier_ice_8_param_default.npz")
 print(f"Emulator: {emu!r}\n")
 
 # Parameters that are known a priori and will NOT be retrieved.
@@ -41,7 +41,7 @@ print(f"Emulator: {emu!r}\n")
 # - dust=1000: mineral dust concentration in ppb (fixed because dust has
 #   very low spectral sensitivity at typical concentrations; see
 #   docs/INVERSION.md for details)
-fixed = {"dust": 1000, "solzen": 50, "direct": 1}
+fixed = {"dust": 1000, "snow_algae": 0, "solzen": 50, "direct": 1}
 
 # Define a "true" ice surface.  We generate the observation from the FULL
 # FORWARD MODEL (not the emulator) so that the retrieval must bridge the

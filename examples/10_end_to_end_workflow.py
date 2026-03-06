@@ -29,14 +29,14 @@ PLOT = False
 # ======================================================================
 # The emulator is a neural-network surrogate that predicts 480-band
 # spectral albedo in ~microseconds (vs ~50 ms for the full RT model).
-# The pre-built default emulator at this path covers 7 parameters and
-# was trained on 150,000 LHS samples of solid glacier ice (layer_type=1).
+# The pre-built default emulator at this path covers 8 parameters and
+# was trained on 50,000 LHS samples of solid glacier ice (layer_type=1).
 #
 # For custom parameter ranges or different ice configurations, build your
 # own emulator using Emulator.build() — see example 04.
 
 print("Step 1: Load emulator\n")
-emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
+emu = Emulator.load("data/emulators/glacier_ice_8_param_default.npz")
 print(f"  {emu!r}")
 
 # ======================================================================
@@ -55,7 +55,7 @@ print("\nStep 2: Generate synthetic Sentinel-2 observation\n")
 # Dust is fixed at 1000 ppb — it has very low spectral sensitivity at
 # typical environmental concentrations (< ~5000 ppb), so including it
 # as a free parameter would add noise without improving the fit.
-fixed = {"solzen": 50, "direct": 1, "dust": 1000}
+fixed = {"solzen": 50, "direct": 1, "dust": 1000, "snow_algae": 0}
 
 # The "true" physical parameters of the ice surface.  In a real
 # application, these are unknown — they are what we want to retrieve.

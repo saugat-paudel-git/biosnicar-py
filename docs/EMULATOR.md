@@ -9,17 +9,17 @@ from biosnicar.emulator import Emulator
 from biosnicar import run_emulator
 
 # Load the pre-built default emulator (ships with the repo)
-emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
+emu = Emulator.load("data/emulators/glacier_ice_8_param_default.npz")
 
-# Predict spectral albedo (all 7 default emulator params required)
+# Predict spectral albedo (all 8 default emulator params required)
 albedo = emu.predict(
-    rds=1000, rho=600, black_carbon=5000, dust=1000,
+    rds=1000, rho=600, black_carbon=5000, snow_algae=0, dust=1000,
     glacier_algae=50000, direct=1, solzen=50,
 )
 
 # Or get a full Outputs object (BBA, BBAVIS, BBANIR, .to_platform())
 outputs = run_emulator(
-    emu, rds=1000, rho=600, black_carbon=5000, dust=1000,
+    emu, rds=1000, rho=600, black_carbon=5000, snow_algae=0, dust=1000,
     glacier_algae=50000, direct=1, solzen=50,
 )
 print(outputs.BBA)
@@ -53,19 +53,20 @@ emu2 = Emulator.load("glacier_ice.npz")  # pure numpy, no sklearn required
 
 ## Default Emulator
 
-The repository ships with a 7-parameter default emulator at `data/emulators/glacier_ice_7_param_default.npz`, built from 150,000 LHS samples with `layer_type=1` (solid ice). Its free parameters are:
+The repository ships with an 8-parameter default emulator at `data/emulators/glacier_ice_8_param_default.npz`, built from 50,000 LHS samples with `layer_type=1` (solid ice). Its free parameters are:
 
 | Parameter       | Range          | Units       |
 | --------------- | -------------- | ----------- |
-| `rds`           | (100, 10000)   | um          |
-| `rho`           | (100, 900)     | kg/m³       |
+| `rds`           | (500, 10000)   | um          |
+| `rho`           | (300, 900)     | kg/m³       |
 | `black_carbon`  | (0, 5000)      | ppb         |
-| `dust`          | (0, 500000)    | ppb         |
+| `snow_algae`    | (0, 500000)    | cells/mL    |
 | `glacier_algae` | (0, 500000)    | cells/mL    |
+| `dust`          | (0, 50000)     | ppb         |
 | `direct`        | (0, 1)         | binary flag |
-| `solzen`        | (25, 65)       | degrees     |
+| `solzen`        | (25, 80)       | degrees     |
 
-All 7 parameters must be provided when calling `predict()` or passed via `fixed_params` in `retrieve()`.
+All 8 parameters must be provided when calling `predict()` or passed via `fixed_params` in `retrieve()`.
 
 **Note on SSA retrieval:** The inversion module supports retrieving specific surface area (SSA) directly instead of rds and rho individually. When SSA is a free parameter, the inversion decomposes it into (rds, rho) for each emulator call using a reference density. See [INVERSION.md](INVERSION.md) for details.
 

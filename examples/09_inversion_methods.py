@@ -36,12 +36,12 @@ MCMC = False
 # Setup: load emulator and generate a synthetic observation
 # ======================================================================
 
-# Load the pre-built 7-parameter glacier ice emulator.
-emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
+# Load the pre-built 8-parameter glacier ice emulator.
+emu = Emulator.load("data/emulators/glacier_ice_8_param_default.npz")
 
 # Parameters that are known a priori and will NOT be retrieved.
 # Dust is fixed at 1000 ppb (low spectral sensitivity — see docs).
-fixed = {"solzen": 50, "direct": 1, "dust": 1000}
+fixed = {"solzen": 50, "direct": 1, "dust": 1000, "snow_algae": 0}
 
 # Generate a synthetic observation from the FULL FORWARD MODEL (not the
 # emulator) for an honest comparison — the retrieval must bridge the

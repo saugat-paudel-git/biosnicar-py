@@ -12,14 +12,14 @@ The inverse module retrieves ice physical properties from observed albedo using 
 from biosnicar.emulator import Emulator
 from biosnicar.inverse import retrieve
 
-emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
+emu = Emulator.load("data/emulators/glacier_ice_8_param_default.npz")
 
 # observed = your 480-band spectral albedo measurement
 result = retrieve(
     observed=observed,
     parameters=["ssa", "black_carbon", "glacier_algae", "dust"],
     emulator=emu,
-    fixed_params={"direct": 1, "solzen": 50},
+    fixed_params={"direct": 1, "solzen": 50, "snow_algae": 0},
 )
 print(result.summary())
 print(result.best_fit["ssa"])       # m²/kg
@@ -40,7 +40,7 @@ result = retrieve(
     platform="sentinel2",
     observed_band_names=["B2", "B3", "B4", "B8", "B11"],
     obs_uncertainty=np.array([0.02, 0.02, 0.02, 0.03, 0.05]),
-    fixed_params={"direct": 1, "solzen": 50, "dust": 1000},
+    fixed_params={"direct": 1, "solzen": 50, "dust": 1000, "snow_algae": 0},
 )
 print(result.summary())
 ```
@@ -53,7 +53,7 @@ result = retrieve(
     observed=observed,
     parameters=["rds", "black_carbon", "glacier_algae"],
     emulator=emu,
-    fixed_params={"direct": 1, "solzen": 50, "rho": 600, "dust": 1000},
+    fixed_params={"direct": 1, "solzen": 50, "rho": 600, "dust": 1000, "snow_algae": 0},
 )
 ```
 
@@ -290,7 +290,7 @@ result = retrieve(..., fixed_params={"direct": 1})
 result = retrieve(
     ...,
     parameters=["ssa", "black_carbon", "glacier_algae"],
-    fixed_params={"direct": 1, "solzen": 53.2, "dust": 500},
+    fixed_params={"direct": 1, "solzen": 53.2, "dust": 500, "snow_algae": 0},
 )
 ```
 
@@ -420,7 +420,7 @@ Add prior information via `regularization={name: (mean, sigma)}`. This adds a pe
 ### Field spectrometer measurement
 
 ```python
-emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
+emu = Emulator.load("data/emulators/glacier_ice_8_param_default.npz")
 
 # Measured 480-band albedo from ASD FieldSpec
 # SSA retrieval — no need to know rho
@@ -428,7 +428,7 @@ result = retrieve(
     observed=measured_albedo,
     parameters=["ssa", "black_carbon", "glacier_algae", "dust"],
     emulator=emu,
-    fixed_params={"direct": 1, "solzen": 50},
+    fixed_params={"direct": 1, "solzen": 50, "snow_algae": 0},
 )
 print(result.summary())
 print(f"SSA = {result.best_fit['ssa']:.2f} ± {result.uncertainty['ssa']:.2f} m²/kg")
@@ -446,7 +446,7 @@ result = retrieve(
     platform="sentinel2",
     observed_band_names=["B2", "B3", "B4", "B8", "B11"],
     obs_uncertainty=np.array([0.02, 0.02, 0.02, 0.03, 0.05]),
-    fixed_params={"direct": 1, "solzen": 50, "dust": 1000},
+    fixed_params={"direct": 1, "solzen": 50, "dust": 1000, "snow_algae": 0},
 )
 ```
 
@@ -458,7 +458,7 @@ result = retrieve(
     observed=measured_albedo,
     parameters=["rds", "black_carbon", "glacier_algae"],
     emulator=emu,
-    fixed_params={"direct": 1, "solzen": 50, "rho": 750, "dust": 500},
+    fixed_params={"direct": 1, "solzen": 50, "rho": 750, "dust": 500, "snow_algae": 0},
 )
 ```
 
@@ -470,7 +470,7 @@ result = retrieve(
     observed=measured_albedo,
     parameters=["ssa", "black_carbon", "glacier_algae"],
     emulator=emu,
-    fixed_params={"direct": 1, "solzen": 50, "dust": 500},
+    fixed_params={"direct": 1, "solzen": 50, "dust": 500, "snow_algae": 0},
     ssa_rho=700.0,  # use 700 kg/m³ as reference density
 )
 # Different ssa_rho gives same SSA, different internal rds
@@ -499,7 +499,7 @@ result = retrieve(
     mcmc_walkers=32,
     mcmc_steps=5000,
     mcmc_burn=1000,
-    fixed_params={"direct": 1, "solzen": 50},
+    fixed_params={"direct": 1, "solzen": 50, "snow_algae": 0},
 )
 
 # Posterior statistics
