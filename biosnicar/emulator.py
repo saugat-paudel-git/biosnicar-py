@@ -61,6 +61,12 @@ _INTEGER_PARAMS = {"rds", "solzen"}
 # integer SZA keys from 0 to 89.  Validation enforces [1, 89].
 _SOLZEN_RANGE = (1, 89)
 
+# Impurity parameters sampled in log10(x+1) space during LHS to ensure
+# adequate coverage of low concentrations (including near-zero / clean ice).
+# Without this, uniform sampling in e.g. [0, 500000] puts < 0.2% of
+# training points below 1000, and the emulator fails for clean spectra.
+_LOG_SAMPLE_PARAMS = {"black_carbon", "snow_algae", "glacier_algae", "dust"}
+
 
 def _snap_rds(value):
     """Snap a continuous rds value to the nearest lookup-table radius.
@@ -300,10 +306,20 @@ class Emulator:
         # --- 1. Latin hypercube sampling ---
         lhs_unit = _latin_hypercube(n_samples, n_dims, seed=seed)
 
-        # Scale to parameter bounds
+        # Scale to parameter bounds.  Impurity parameters are sampled in
+        # log10(x+1) space so that low concentrations (including clean ice)
+        # are represented as well as high concentrations.
         lo_arr = np.array([bounds_ordered[n][0] for n in param_names])
         hi_arr = np.array([bounds_ordered[n][1] for n in param_names])
         lhs_scaled = lo_arr + lhs_unit * (hi_arr - lo_arr)
+
+        for j, name in enumerate(param_names):
+            if name in _LOG_SAMPLE_PARAMS:
+                log_lo = np.log10(lo_arr[j] + 1)
+                log_hi = np.log10(hi_arr[j] + 1)
+                lhs_scaled[:, j] = (
+                    10 ** (log_lo + lhs_unit[:, j] * (log_hi - log_lo)) - 1
+                )
 
         # Snap binary parameters to {0, 1}
         for j, name in enumerate(param_names):
@@ -597,6 +613,13 @@ class Emulator:
         lo = np.array([self._bounds[n][0] for n in self._param_names])
         hi = np.array([self._bounds[n][1] for n in self._param_names])
         scaled = lo + lhs * (hi - lo)
+
+        # Log-space sampling for impurities (matches training distribution)
+        for j, name in enumerate(self._param_names):
+            if name in _LOG_SAMPLE_PARAMS:
+                log_lo = np.log10(lo[j] + 1)
+                log_hi = np.log10(hi[j] + 1)
+                scaled[:, j] = 10 ** (log_lo + lhs[:, j] * (log_hi - log_lo)) - 1
 
         params_list = []
         for i in range(n_points):

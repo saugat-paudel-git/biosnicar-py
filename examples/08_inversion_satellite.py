@@ -120,9 +120,7 @@ result2 = retrieve(
     obs_uncertainty=obs_unc,
 )
 for name in result2.best_fit:
-    print(
-        f"  {name:25s} = {result2.best_fit[name]:10.4f} +/- {result2.uncertainty[name]:.4f}"
-    )
+    print(f"  {name:25s} = {result2.best_fit[name]:10.4f}")
 
 # ======================================================================
 # Example 3: Fewer free parameters

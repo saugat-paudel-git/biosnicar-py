@@ -117,7 +117,8 @@ print(f"\n  S2 bands (noisy): {dict(zip(band_names, obs_noisy.round(4)))}")
 #   - fixed_params: known parameters that are NOT retrieved
 #
 # The default optimiser (L-BFGS-B with DE pre-search) typically converges
-# in ~1-2 seconds with the emulator.
+# in ~1-2 seconds with the emulator.  For Bayesian uncertainty estimates,
+# use method="mcmc" — see example 09.
 
 print("\nStep 3: Retrieve ice properties\n")
 result = retrieve(
@@ -149,15 +150,14 @@ true_retrieval = {
 }
 
 print(
-    f"  {'Parameter':25s} {'True':>10s} {'Retrieved':>10s} {'Error':>10s} {'Unc':>10s}"
+    f"  {'Parameter':25s} {'True':>10s} {'Retrieved':>10s} {'Error':>10s}"
 )
-print(f"  {'-' * 25} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}")
+print(f"  {'-' * 25} {'-' * 10} {'-' * 10} {'-' * 10}")
 for name in result.best_fit:
     true_val = true_retrieval[name]
     ret_val = result.best_fit[name]
     err = abs(ret_val - true_val)
-    unc = result.uncertainty[name]
-    print(f"  {name:25s} {true_val:10.4f} {ret_val:10.4f} {err:10.4f} {unc:10.4f}")
+    print(f"  {name:25s} {true_val:10.4f} {ret_val:10.4f} {err:10.4f}")
 
 # The derived dict contains the internal (rds, rho) decomposition used
 # by the emulator.  rho_ref is the reference density (arbitrary) and

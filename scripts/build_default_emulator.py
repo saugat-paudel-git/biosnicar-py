@@ -24,7 +24,7 @@ OUTPUT = (
 def main():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-    print("Building default glacier-ice emulator (50,000 samples, 8 parameters)...")
+    print("Building default glacier-ice emulator (35,000 samples, 8 parameters)...")
     emu = Emulator.build(
         params={  # provide min and max for each param, then n_samples.
             "rds": (500, 10000),
@@ -34,9 +34,9 @@ def main():
             "snow_algae": (0, 500000),
             "glacier_algae": (0, 500000),
             "direct": (0, 1),
-            "solzen": (25, 80)
+            "solzen": (20, 80)
         },
-        n_samples=50000,
+        n_samples=35000,
         layer_type=1,
         direct=1,
         progress=True,

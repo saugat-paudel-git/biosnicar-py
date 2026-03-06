@@ -240,6 +240,8 @@ Ice albedo is a smooth function of physical parameters. This modest network is a
 
 LHS fills parameter space uniformly with far fewer samples than a Cartesian grid. Each parameter's marginal distribution is stratified into N equal bins with one sample per bin. This provides better coverage than random sampling.
 
+Impurity parameters (`black_carbon`, `snow_algae`, `glacier_algae`, `dust`) are sampled in log10(x+1) space. This ensures adequate coverage of low concentrations — with linear sampling in e.g. [0, 500000], fewer than 0.2% of points fall below 1000, and the emulator fails for clean ice. Log-space sampling distributes points evenly across orders of magnitude.
+
 ### Parameter snapping
 
 - **`rds`** values are snapped to the nearest lookup-table entry (step 5 for rds < 100, step 10 for 100-5000, step 500 for >5000)

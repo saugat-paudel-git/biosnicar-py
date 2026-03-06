@@ -84,9 +84,9 @@ result = retrieve(
 )
 print(result.summary())
 
-# The result object contains the best-fit parameters, their 1-sigma
-# uncertainties (from the Hessian), the predicted spectrum at the optimum,
-# and convergence diagnostics.
+# The result object contains the best-fit parameters, the predicted
+# spectrum at the optimum, and convergence diagnostics.  For proper
+# Bayesian uncertainty estimates, use method="mcmc" — see example 09.
 print(f"\n  True SSA:      {true_ssa:.4f} m2/kg")
 print(f"  Retrieved SSA: {result.best_fit['ssa']:.4f} m2/kg")
 print(f"  SSA error:     {abs(result.best_fit['ssa'] - true_ssa):.4f} m2/kg")
@@ -170,9 +170,7 @@ result4 = retrieve(
 )
 print(f"  Retrieved with uncertainty weighting:")
 for name in result4.best_fit:
-    print(
-        f"    {name:25s} = {result4.best_fit[name]:12.4f} +/- {result4.uncertainty[name]:.4f}"
-    )
+    print(f"    {name:25s} = {result4.best_fit[name]:12.4f}")
 
 # ======================================================================
 # Example 5: Regularization (Gaussian priors)
@@ -210,7 +208,8 @@ for name in result5.best_fit:
 # downstream analysis.  The most important fields are:
 #
 # - best_fit:         dict of {param_name: optimal_value}
-# - uncertainty:      dict of {param_name: 1_sigma} from the Hessian
+# - uncertainty:      dict of {param_name: 1_sigma} (Hessian approx;
+#                      use method="mcmc" for Bayesian uncertainties)
 # - predicted_albedo: 480-band spectrum at the best-fit point
 # - observed:         the input observation (for residual analysis)
 # - converged:        whether the optimiser reported convergence
@@ -228,20 +227,54 @@ print(f"  observed shape:   {result.observed.shape}")
 print(f"  derived:          {result.derived}")
 
 # ======================================================================
-# Optional: plot observed vs retrieved spectrum
+# Optional: multi-scenario retrieval comparison plot
 # ======================================================================
+# Generate synthetic observations across a range of ice conditions — from
+# clean coarse-grained ice (high SSA, low impurities) to heavily loaded
+# fine-grained ice (low SSA, high impurities) — then retrieve each and
+# plot observed vs retrieved spectra side by side.
+
 if PLOT:
     import matplotlib.pyplot as plt
 
+    scenarios = [
+        {"label": "Clean, coarse ice",
+         "rds": 3000, "rho": 500, "black_carbon": 100, "glacier_algae": 0},
+        {"label": "Moderate BC",
+         "rds": 1500, "rho": 600, "black_carbon": 2000, "glacier_algae": 0},
+        {"label": "Algae-dominated",
+         "rds": 1000, "rho": 700, "black_carbon": 500, "glacier_algae": 200000},
+        {"label": "Dense, heavily loaded",
+         "rds": 800, "rho": 850, "black_carbon": 4000, "glacier_algae": 300000},
+    ]
+    colors = ["#1b9e77", "#d95f02", "#7570b3", "#e7298a"]
     wavelengths = np.arange(0.205, 4.999, 0.01)
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(wavelengths, observed, "k-", label="Observed", linewidth=1.5)
-    ax.plot(wavelengths, result.predicted_albedo, "r--", label="Retrieved (SSA)", linewidth=1)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for scen, col in zip(scenarios, colors):
+        label = scen.pop("label")
+        obs_i = np.array(
+            run_model(**scen, **fixed, layer_type=1).albedo, dtype=np.float64
+        )
+        res_i = retrieve(
+            observed=obs_i,
+            parameters=ice_params,
+            emulator=emu,
+            fixed_params=fixed,
+        )
+        true_ssa_i = _compute_ssa(scen["rds"], scen["rho"])
+        ssa_err = abs(res_i.best_fit["ssa"] - true_ssa_i) / true_ssa_i * 100
+
+        ax.plot(wavelengths, obs_i, "-", color=col, linewidth=1.5,
+                label=f"{label} (obs)")
+        ax.plot(wavelengths, res_i.predicted_albedo, "--", color=col,
+                linewidth=1, label=f"{label} (ret, SSA err {ssa_err:.1f}%)")
+
     ax.set_xlabel("Wavelength (um)")
     ax.set_ylabel("Albedo")
     ax.set_xlim(0.2, 2.5)
     ax.set_ylim(0, 1.05)
-    ax.set_title("Spectral retrieval: observed vs retrieved (SSA mode)")
-    ax.legend()
+    ax.set_title("SSA retrieval across ice surface scenarios")
+    ax.legend(fontsize=7, ncol=2, loc="upper right")
     fig.tight_layout()
     plt.show()
