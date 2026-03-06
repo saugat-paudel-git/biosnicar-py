@@ -5,4 +5,4 @@ The canonical location for the Emulator class is now
 ``from biosnicar.inverse.emulator import Emulator`` continues to work.
 """
 
-from biosnicar.emulator import Emulator, _latin_hypercube, _snap_rds  # noqa: F401
+from biosnicar.emulator import Emulator  # noqa: F401

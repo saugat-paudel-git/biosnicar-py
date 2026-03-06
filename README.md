@@ -207,14 +207,14 @@ Supported platforms: `sentinel2`, `sentinel3`, `landsat8`, `modis`, `cesm2band`,
 
 The emulator is a neural-network surrogate trained on BioSNICAR forward model outputs. It predicts 480-band spectral albedo in ~microseconds (vs ~50 ms for the full model), making optimisation and MCMC practical.
 
-A pre-built default emulator ships with the repo at `data/emulators/glacier_ice_7_param_default.npz`:
+A pre-built default emulator ships with the repo at `data/emulators/glacier_ice_8_param_default.npz`:
 
 ```python
 from biosnicar.emulator import Emulator
 from biosnicar import run_emulator
 
 # Load and predict
-emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
+emu = Emulator.load("data/emulators/glacier_ice_8_param_default.npz")
 outputs = run_emulator(emu, rds=1000, rho=600,
                        black_carbon=5000, glacier_algae=50000)
 print(outputs.BBA)

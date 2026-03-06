@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the default glacier-ice emulator shipped with the repository.
 
-Creates a 4-parameter emulator (rds, rho, black_carbon, glacier_algae)
-trained on 5000 Latin hypercube samples and saves it to
-``data/emulators/glacier_ice_7_param_default.npz``.
+Creates an 8-parameter emulator (rds, rho, black_carbon, snow_algae,
+glacier_algae, dust, direct, solzen) trained on 50,000 Latin hypercube
+samples and saves it to ``data/emulators/glacier_ice_8_param_default.npz``.
 
 Usage:
     python scripts/build_default_emulator.py
@@ -17,25 +17,26 @@ OUTPUT = (
     Path(__file__).resolve().parent.parent
     / "data"
     / "emulators"
-    / "glacier_ice_7_param_default.npz"
+    / "glacier_ice_8_param_default.npz"
 )
 
 
 def main():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
-    print("Building default glacier-ice emulator (150000 samples)...")
+    print("Building default glacier-ice emulator (50,000 samples, 8 parameters)...")
     emu = Emulator.build(
         params={  # provide min and max for each param, then n_samples.
-            "rds": (100, 10000),
-            "rho": (100, 900),
+            "rds": (500, 10000),
+            "rho": (300, 900),
             "black_carbon": (0, 5000),
-            "dust": (0, 500000),
+            "dust": (0, 50000),
+            "snow_algae": (0, 500000),
             "glacier_algae": (0, 500000),
             "direct": (0, 1),
-            "solzen": (25, 65)
+            "solzen": (25, 80)
         },
-        n_samples=150000,
+        n_samples=50000,
         layer_type=1,
         direct=1,
         progress=True,

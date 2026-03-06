@@ -46,13 +46,11 @@ def _ssa_uncertainty(rds, rho, sigma_rds, sigma_rho):
 
     Partial derivatives of SSA = 3(1 - rho/917) / (r * rho):
 
-        dSSA/dr   = -SSA / r
-        dSSA/drho = -3 / (r * rho^2) - 3 / (917 * r * rho)
-                    (combined: dSSA/drho = -3(1/rho + 1/917) / (r * rho))
+        dSSA/drds = -SSA / rds          [m2 kg-1 per um]
+        dSSA/drho = -3 / (r * rho^2)    [m2 kg-1 per kg m-3]
 
-    but more simply:
-        dSSA/drho = -3 / (r * rho^2)  +  (-3 / (917 * r * rho))
-                  = -3 / (r * rho) * (1/rho + 1/917)
+    The rho derivative follows from rewriting SSA = 3/(r) * (1/rho - 1/917),
+    so d/drho = 3/r * (-1/rho^2).
     """
     r_m = rds * 1e-6
     if r_m <= 0 or rho <= 0:
@@ -63,8 +61,8 @@ def _ssa_uncertainty(rds, rho, sigma_rds, sigma_rho):
     # dSSA/d(rds_um) = dSSA/dr * dr/d(rds_um) = (-SSA / r) * 1e-6
     dSSA_drds = -ssa_val / rds  # in m2 kg-1 per um
 
-    # dSSA/drho = -3/(r * rho^2) - 3/(917 * r * rho)
-    dSSA_drho = -3.0 / (r_m * rho ** 2) - 3.0 / (_RHO_ICE * r_m * rho)
+    # dSSA/drho = -3 / (r * rho^2)
+    dSSA_drho = -3.0 / (r_m * rho ** 2)
 
     var = (dSSA_drds * sigma_rds) ** 2 + (dSSA_drho * sigma_rho) ** 2
     return float(np.sqrt(var))

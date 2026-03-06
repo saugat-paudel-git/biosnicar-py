@@ -398,13 +398,15 @@ def _make_ssa_emulator_fn(emulator, parameters, fixed_params, ref_rho):
 
     def fn(**active_params):
         full = dict(fixed)
-        if "ssa" in active_params:
-            ssa_val = active_params.pop("ssa")
+        ssa_val = active_params.get("ssa")
+        if ssa_val is not None:
             phi = 1.0 - ref_rho / _RHO_ICE
             rds_um = 3.0 * phi / (ssa_val * ref_rho) / 1e-6
             full["rds"] = float(rds_um)
             full["rho"] = float(ref_rho)
-        full.update(active_params)
+            full.update((k, v) for k, v in active_params.items() if k != "ssa")
+        else:
+            full.update(active_params)
         return emulator.predict(**full)
 
     return fn
@@ -414,7 +416,7 @@ def _run_scipy_minimize(cost_fn, parameters, active_bounds, x0_vec,
                         forward_fn, observed, method):
     """Run scipy.optimize.minimize and return RetrievalResult.
 
-    For L-BFGS-B with 3+ parameters, a quick differential-evolution
+    For L-BFGS-B with 2+ parameters, a quick differential-evolution
     pre-search is used to escape local minima before polishing.
     """
     options = {"maxiter": 2000}

@@ -25,7 +25,7 @@ python examples/05_emulator_predict.py --plot
 python examples/09_inversion_methods.py --mcmc --plot
 ```
 
-Examples 05-10 require the pre-built default emulator at `data/emulators/glacier_ice_7_param_default.npz`. To rebuild it:
+Examples 05-10 require the pre-built default emulator at `data/emulators/glacier_ice_8_param_default.npz`. To rebuild it:
 
 ```
 python scripts/build_default_emulator.py
