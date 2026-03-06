@@ -29,7 +29,7 @@ _BINARY_PARAMS = {"direct"}
 # Impurity concentrations span orders of magnitude (0–500 000); log-space
 # makes the cost surface much better conditioned and prevents the optimizer
 # from getting stuck at high concentrations.
-_LOG_SPACE_PARAMS = {"black_carbon", "snow_algae", "glacier_algae", "dust"}
+_LOG_SPACE_PARAMS = {"black_carbon", "snow_algae", "glacier_algae", "dust", "ssa"}
 
 
 def _to_log(x):
@@ -52,6 +52,7 @@ DEFAULT_BOUNDS = {
     "snow_algae": (0.0, 500000.0),
     "glacier_algae": (0.0, 100000.0),
     "dust": (0.0, 500000.0),
+    "ssa": (0.01, 300.0),       # m2/kg — dense ice to fresh snow
 }
 
 DEFAULT_X0 = {
@@ -63,6 +64,7 @@ DEFAULT_X0 = {
     "snow_algae": 10000.0,
     "glacier_algae": 100.0,
     "dust": 100.0,
+    "ssa": 2.0,                 # m2/kg — typical glacier ice
 }
 
 
@@ -83,6 +85,7 @@ def retrieve(
     mcmc_steps=2000,
     mcmc_burn=500,
     fixed_params=None,
+    ssa_rho=None,
 ):
     """Retrieve ice physical properties from observed albedo.
 
@@ -142,6 +145,11 @@ def retrieve(
         ``{param_name: value}`` for parameters that are known and should
         not be optimised.  The parameter must exist in the emulator's
         input space.
+    ssa_rho : float, optional
+        Reference density (kg m-3) used to decompose SSA into (rds, rho)
+        when ``"ssa"`` is in *parameters*.  Falls back to
+        ``fixed_params["rho"]``, then the midpoint of the emulator's rho
+        training range, then 500.0 kg m-3.
 
     Returns
     -------
@@ -169,11 +177,46 @@ def retrieve(
             stacklevel=2,
         )
 
+    # --- SSA validation ---
+    use_ssa = "ssa" in parameters
+    if use_ssa:
+        if "rds" in parameters or "rho" in parameters:
+            raise ValueError(
+                "Cannot retrieve 'ssa' alongside 'rds' or 'rho'. "
+                "SSA replaces both — the emulator decomposes SSA into "
+                "(rds, rho) internally using a reference density."
+            )
+        # Determine reference density for SSA → (rds, rho) decomposition
+        _ref_rho = ssa_rho
+        if _ref_rho is None and fixed_params and "rho" in fixed_params:
+            _ref_rho = float(fixed_params["rho"])
+        if _ref_rho is None and emulator is not None:
+            emu_b = emulator.bounds
+            if "rho" in emu_b:
+                _ref_rho = float(np.mean(emu_b["rho"]))
+        if _ref_rho is None:
+            _ref_rho = 500.0
+
     # --- Build forward function from emulator ---
     if emulator is not None and forward_fn is None:
-        forward_fn = _make_emulator_fn(emulator, parameters, fixed_params)
         if bounds is None:
             bounds = {}
+        if use_ssa:
+            forward_fn = _make_ssa_emulator_fn(
+                emulator, parameters, fixed_params, _ref_rho
+            )
+            # Auto-compute SSA bounds using ref_rho and emulator rds range.
+            # This ensures the internal rds decomposition stays within the
+            # emulator's training bounds.
+            if "ssa" not in bounds:
+                from biosnicar.inverse.result import _compute_ssa
+                emu_b = emulator.bounds
+                rds_lo, rds_hi = emu_b.get("rds", (100.0, 5000.0))
+                ssa_hi = _compute_ssa(rds_lo, _ref_rho)
+                ssa_lo = max(_compute_ssa(rds_hi, _ref_rho), 0.001)
+                bounds["ssa"] = (ssa_lo, ssa_hi)
+        else:
+            forward_fn = _make_emulator_fn(emulator, parameters, fixed_params)
         # Fill bounds from emulator where not overridden
         emu_bounds = emulator.bounds
         for p in parameters:
@@ -321,16 +364,46 @@ def retrieve(
         # Re-predict with correct linear values
         result.predicted_albedo = forward_fn(**result.best_fit)
 
+    # --- Populate derived quantities for SSA mode ---
+    if use_ssa and "ssa" in result.best_fit:
+        ssa_val = result.best_fit["ssa"]
+        phi = 1.0 - _ref_rho / 917.0
+        rds_internal = 3.0 * phi / (ssa_val * _ref_rho) / 1e-6
+        result.derived = {
+            "rds_internal": float(rds_internal),
+            "rho_ref": float(_ref_rho),
+        }
+
     return result
 
 
 def _make_emulator_fn(emulator, parameters, fixed_params):
     """Build a forward function that fills in fixed params for the emulator."""
-    all_params = emulator.param_names
     fixed = dict(fixed_params) if fixed_params else {}
 
     def fn(**active_params):
         full = dict(fixed)
+        full.update(active_params)
+        return emulator.predict(**full)
+
+    return fn
+
+
+_RHO_ICE = 917.0
+
+
+def _make_ssa_emulator_fn(emulator, parameters, fixed_params, ref_rho):
+    """Forward function that converts SSA to (rds, rho) internally."""
+    fixed = dict(fixed_params) if fixed_params else {}
+
+    def fn(**active_params):
+        full = dict(fixed)
+        if "ssa" in active_params:
+            ssa_val = active_params.pop("ssa")
+            phi = 1.0 - ref_rho / _RHO_ICE
+            rds_um = 3.0 * phi / (ssa_val * ref_rho) / 1e-6
+            full["rds"] = float(rds_um)
+            full["rho"] = float(ref_rho)
         full.update(active_params)
         return emulator.predict(**full)
 

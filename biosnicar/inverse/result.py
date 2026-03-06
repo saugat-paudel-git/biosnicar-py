@@ -110,6 +110,9 @@ class RetrievalResult:
     method: str
     n_function_evals: int
 
+    # Auxiliary derived quantities (e.g. internal rds/rho decomposition in SSA mode)
+    derived: Dict[str, float] = field(default_factory=dict)
+
     # MCMC-specific fields (None unless method="mcmc")
     chains: Optional[np.ndarray] = None
     acceptance_fraction: Optional[float] = None
