@@ -61,7 +61,7 @@ IMPURITIES:
     FILE: "snow_algae_empirical_Chevrollier2023.npz"
     COATED: False
     UNIT: 1
-    CONC: [40000 ,0]
+    CONC: [0 ,0]
 
   glacier_algae:
     FILE: "ice_algae_empirical_Chevrollier2023.npz"
@@ -74,7 +74,7 @@ IMPURITIES:
     COATED: False
     UNIT: 0
     CONC: [0 ,0]
-    
+
 PLOT:
     FIG_SIZE: (8,6)
     FACECOLOR: "white"

@@ -8,18 +8,28 @@ result inspection.
 
 import numpy as np
 
+from biosnicar import run_model
 from biosnicar.emulator import Emulator
 from biosnicar.inverse import retrieve
 
-PLOT = False
+PLOT = True
 
 # Load the default emulator
 emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
 print(f"Emulator: {emu!r}\n")
 
-# Generate a synthetic observation from known parameters
-true_params = dict(rds=1000, rho=600, black_carbon=5000, glacier_algae=50000)
-observed = emu.predict(**true_params)
+# Observing conditions (known, not retrieved)
+fixed = {"solzen": 50, "direct": 1}
+
+# Generate a synthetic observation from the FULL FORWARD MODEL (not the
+# emulator) so that the retrieval is honest — the emulator must bridge the
+# approximation gap between its MLP predictions and the true RT solver output.
+true_params = dict(rds=1000, rho=600, black_carbon=5000, glacier_algae=100000, dust=1000)
+true_outputs = run_model(**true_params, **fixed, layer_type=1)
+observed = np.array(true_outputs.albedo, dtype=np.float64)
+
+# Ice properties to retrieve
+ice_params = ["rds", "rho", "black_carbon", "dust", "glacier_algae"]
 
 # ======================================================================
 # Example 1: Basic spectral retrieval
@@ -27,8 +37,9 @@ observed = emu.predict(**true_params)
 print("=== Example 1: Basic spectral retrieval ===\n")
 result = retrieve(
     observed=observed,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae"],
+    parameters=ice_params,
     emulator=emu,
+    fixed_params=fixed,
 )
 print(result.summary())
 print(f"\n  True:      {true_params}")
@@ -40,9 +51,9 @@ print(f"  Retrieved: {result.best_fit}")
 print("\n\n=== Example 2: Fix density, retrieve the rest ===\n")
 result2 = retrieve(
     observed=observed,
-    parameters=["rds", "black_carbon", "glacier_algae"],
+    parameters=["rds", "black_carbon", "dust", "glacier_algae"],
     emulator=emu,
-    fixed_params={"rho": 600},  # density known from in-situ measurement
+    fixed_params={**fixed, "rho": 600},  # density known from in-situ measurement
 )
 print(result2.summary())
 
@@ -57,8 +68,9 @@ print(f"  Using {mask.sum()} of 480 bands (0.3-2.5 um)")
 
 result3 = retrieve(
     observed=observed,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae"],
+    parameters=ice_params,
     emulator=emu,
+    fixed_params=fixed,
     wavelength_mask=mask,
 )
 print(f"  Retrieved rds: {result3.best_fit['rds']:.0f} (true: 1000)")
@@ -77,8 +89,9 @@ noisy_obs = np.clip(noisy_obs, 0, 1)
 obs_unc = np.full(480, noise_sigma)
 result4 = retrieve(
     observed=noisy_obs,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae"],
+    parameters=ice_params,
     emulator=emu,
+    fixed_params=fixed,
     obs_uncertainty=obs_unc,
 )
 print(f"  Retrieved with uncertainty weighting:")
@@ -93,8 +106,9 @@ for name in result4.best_fit:
 print("\n\n=== Example 5: Regularization with priors ===\n")
 result5 = retrieve(
     observed=observed,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae"],
+    parameters=ice_params,
     emulator=emu,
+    fixed_params=fixed,
     regularization={
         "rho": (600, 50),  # prior: 600 +/- 50 kg/m3
         "black_carbon": (3000, 5000),  # prior: 3000 +/- 5000 ppb

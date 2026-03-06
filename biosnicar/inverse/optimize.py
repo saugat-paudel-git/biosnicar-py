@@ -21,6 +21,27 @@ from biosnicar.inverse.cost import spectral_cost, band_cost
 from biosnicar.inverse.result import RetrievalResult
 
 
+# Parameters that must be binary (0 or 1) — cannot be continuously optimised.
+# Pass these via ``fixed_params`` instead.
+_BINARY_PARAMS = {"direct"}
+
+# Parameters optimised in log10(x + 1) space for better conditioning.
+# Impurity concentrations span orders of magnitude (0–500 000); log-space
+# makes the cost surface much better conditioned and prevents the optimizer
+# from getting stuck at high concentrations.
+_LOG_SPACE_PARAMS = {"black_carbon", "snow_algae", "glacier_algae", "dust"}
+
+
+def _to_log(x):
+    """Transform linear value(s) to log10(x + 1) space."""
+    return np.log10(np.asarray(x, dtype=float) + 1.0)
+
+
+def _from_log(x):
+    """Transform log10(x + 1) space back to linear."""
+    return 10.0 ** np.asarray(x, dtype=float) - 1.0
+
+
 # Default parameter bounds for glacier ice retrieval
 DEFAULT_BOUNDS = {
     "rds": (100.0, 5000.0),
@@ -30,6 +51,7 @@ DEFAULT_BOUNDS = {
     "black_carbon": (0.0, 100000.0),
     "snow_algae": (0.0, 500000.0),
     "glacier_algae": (0.0, 100000.0),
+    "dust": (0.0, 500000.0),
 }
 
 DEFAULT_X0 = {
@@ -40,6 +62,7 @@ DEFAULT_X0 = {
     "black_carbon": 100.0,
     "snow_algae": 10000.0,
     "glacier_algae": 100.0,
+    "dust": 100.0,
 }
 
 
@@ -131,6 +154,20 @@ def retrieve(
         raise ValueError("Provide either `emulator` or `forward_fn`.")
     if platform is not None and observed_band_names is None:
         raise ValueError("`observed_band_names` is required when `platform` is set.")
+    binary_in_params = _BINARY_PARAMS.intersection(parameters)
+    if binary_in_params:
+        raise ValueError(
+            "Binary parameters {} cannot be continuously optimised. "
+            "Pass them via `fixed_params` instead.".format(binary_in_params)
+        )
+    if "dust" in parameters:
+        warnings.warn(
+            "Mineral dust has very low spectral sensitivity at typical "
+            "environmental concentrations (<5000 ppb).  The retrieval will "
+            "likely be unreliable — consider fixing dust via `fixed_params` "
+            "unless you expect very high concentrations (>10 000 ppb).",
+            stacklevel=2,
+        )
 
     # --- Build forward function from emulator ---
     if emulator is not None and forward_fn is None:
@@ -161,11 +198,13 @@ def retrieve(
                 "Provide via `bounds` argument.".format(p)
             )
 
-    x0_dict = dict(DEFAULT_X0)
+    # Default x0 to midpoint of active bounds.
+    x0_dict = {p: float(np.mean(active_bounds[i]))
+               for i, p in enumerate(parameters)}
+    # Override with user-provided x0 values
     if x0 is not None:
         x0_dict.update(x0)
-    x0_vec = np.array([float(x0_dict.get(p, np.mean(active_bounds[i])))
-                        for i, p in enumerate(parameters)])
+    x0_vec = np.array([x0_dict[p] for p in parameters])
 
     # --- Build cost function ---
     flx_slr = getattr(emulator, "flx_slr", None) if emulator else None
@@ -195,22 +234,94 @@ def retrieve(
                 regularization=regularization,
             )
 
+    # --- Log-space transformation for impurity parameters ---
+    log_mask = np.array([p in _LOG_SPACE_PARAMS for p in parameters])
+    use_log = np.any(log_mask)
+
+    if use_log:
+        # Transform bounds and x0 to log10(x+1) space
+        opt_bounds = []
+        for i, (lo, hi) in enumerate(active_bounds):
+            if log_mask[i]:
+                opt_bounds.append((float(_to_log(lo)), float(_to_log(hi))))
+            else:
+                opt_bounds.append((lo, hi))
+
+        # Compute x0 in log space as midpoint of log bounds (not
+        # transform of linear midpoint, which would be near the upper bound).
+        opt_x0 = x0_vec.copy()
+        for i in range(len(parameters)):
+            if log_mask[i]:
+                opt_x0[i] = float(np.mean(opt_bounds[i]))
+        # Override with user-provided x0 (transformed to log)
+        if x0 is not None:
+            for p, val in x0.items():
+                idx = parameters.index(p) if p in parameters else -1
+                if idx >= 0 and log_mask[idx]:
+                    opt_x0[idx] = float(_to_log(val))
+
+        # Wrap cost function: optimizer works in log space, cost needs linear
+        _orig_cost = cost_fn
+
+        def opt_cost_fn(params):
+            p = params.copy()
+            p[log_mask] = _from_log(params[log_mask])
+            return _orig_cost(p)
+
+        # Wrap forward function similarly
+        _orig_fwd = forward_fn
+
+        def opt_forward_fn(**kw):
+            linear_kw = {}
+            for name, val in kw.items():
+                if name in _LOG_SPACE_PARAMS:
+                    linear_kw[name] = float(_from_log(val))
+                else:
+                    linear_kw[name] = val
+            return _orig_fwd(**linear_kw)
+    else:
+        opt_bounds = active_bounds
+        opt_x0 = x0_vec
+        opt_cost_fn = cost_fn
+        opt_forward_fn = forward_fn
+
     # --- Dispatch to optimiser ---
     if method == "mcmc":
-        return _run_mcmc(
-            cost_fn, parameters, active_bounds, x0_vec,
-            forward_fn, observed, method,
+        result = _run_mcmc(
+            opt_cost_fn, parameters, opt_bounds, opt_x0,
+            opt_forward_fn, observed, method,
             mcmc_walkers, mcmc_steps, mcmc_burn,
         )
     elif method == "differential_evolution":
-        return _run_differential_evolution(
-            cost_fn, parameters, active_bounds, forward_fn, observed, method,
+        result = _run_differential_evolution(
+            opt_cost_fn, parameters, opt_bounds, opt_forward_fn, observed, method,
         )
     else:
-        return _run_scipy_minimize(
-            cost_fn, parameters, active_bounds, x0_vec,
-            forward_fn, observed, method,
+        result = _run_scipy_minimize(
+            opt_cost_fn, parameters, opt_bounds, opt_x0,
+            opt_forward_fn, observed, method,
         )
+
+    # --- Transform results back from log space ---
+    if use_log:
+        for p in parameters:
+            if p in _LOG_SPACE_PARAMS:
+                log_val = result.best_fit[p]
+                linear_val = float(_from_log(log_val))
+                result.best_fit[p] = linear_val
+                # sigma_linear ≈ (x + 1) * ln(10) * sigma_log10
+                if p in result.uncertainty:
+                    result.uncertainty[p] = float(
+                        (linear_val + 1.0) * np.log(10) * result.uncertainty[p]
+                    )
+        if result.chains is not None:
+            for i, p in enumerate(parameters):
+                if p in _LOG_SPACE_PARAMS:
+                    result.chains[:, :, i] = _from_log(result.chains[:, :, i])
+        # Re-predict with correct linear values
+        result.predicted_albedo = forward_fn(**result.best_fit)
+
+    return result
 
 
 def _make_emulator_fn(emulator, parameters, fixed_params):
@@ -228,13 +339,47 @@ def _make_emulator_fn(emulator, parameters, fixed_params):
 
 def _run_scipy_minimize(cost_fn, parameters, active_bounds, x0_vec,
                         forward_fn, observed, method):
-    """Run scipy.optimize.minimize and return RetrievalResult."""
+    """Run scipy.optimize.minimize and return RetrievalResult.
+
+    For L-BFGS-B with 3+ parameters, a quick differential-evolution
+    pre-search is used to escape local minima before polishing.
+    """
     options = {"maxiter": 2000}
     if method == "L-BFGS-B":
         options["ftol"] = 1e-12
     elif method == "Nelder-Mead":
         options["fatol"] = 1e-12
         options["xatol"] = 1e-10
+
+    n_params = len(parameters)
+    total_nfev = 0
+    lo = np.array([b[0] for b in active_bounds])
+    hi = np.array([b[1] for b in active_bounds])
+
+    # Enforce bounds for methods that don't support them natively
+    if method == "Nelder-Mead":
+        _inner = cost_fn
+
+        def cost_fn(params):
+            if np.any(params < lo) or np.any(params > hi):
+                return 1e20
+            return _inner(params)
+
+    # For L-BFGS-B, seed with quick DE to escape local minima
+    if method == "L-BFGS-B" and n_params >= 2:
+        de_result = differential_evolution(
+            cost_fn,
+            bounds=active_bounds,
+            maxiter=100,
+            popsize=10,
+            tol=1e-10,
+            seed=42,
+            polish=False,
+        )
+        total_nfev += int(de_result.nfev)
+        # Use DE result if it's better than the provided x0
+        if de_result.fun < cost_fn(x0_vec):
+            x0_vec = de_result.x
 
     result = minimize(
         cost_fn,
@@ -243,6 +388,7 @@ def _run_scipy_minimize(cost_fn, parameters, active_bounds, x0_vec,
         bounds=active_bounds if method != "Nelder-Mead" else None,
         options=options,
     )
+    total_nfev += int(result.nfev)
 
     best_fit = dict(zip(parameters, result.x))
     predicted = forward_fn(**best_fit)
@@ -260,7 +406,7 @@ def _run_scipy_minimize(cost_fn, parameters, active_bounds, x0_vec,
         observed=observed,
         converged=bool(result.success),
         method=method,
-        n_function_evals=int(result.nfev),
+        n_function_evals=total_nfev,
     )
 
 

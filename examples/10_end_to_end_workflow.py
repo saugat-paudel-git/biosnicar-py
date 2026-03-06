@@ -8,7 +8,7 @@ truth, and convolve the result to platform bands.
 
 import numpy as np
 
-from biosnicar import run_emulator, to_platform
+from biosnicar import run_emulator, run_model, to_platform
 from biosnicar.emulator import Emulator
 from biosnicar.inverse import retrieve
 
@@ -25,15 +25,22 @@ print(f"  {emu!r}")
 # Step 2: Define a "true" ice surface and generate synthetic observation
 # ======================================================================
 print("\nStep 2: Generate synthetic Sentinel-2 observation\n")
+
+# Known conditions (not retrieved): observing geometry, density, and dust.
+# Fixing poorly-constrained parameters improves retrieval of the rest.
+fixed = {"solzen": 50, "direct": 1, "rho": 700, "dust": 500}
+
 true_params = {
     "rds": 1200,  # bubble radius (um)
-    "rho": 700,  # density (kg/m3)
     "black_carbon": 3000,  # black carbon (ppb)
     "glacier_algae": 80000,  # glacier algae (cells/mL)
 }
 
-# Generate full spectrum via emulator
-true_albedo = emu.predict(**true_params)
+# Generate full spectrum via the FULL FORWARD MODEL (not the emulator) so
+# that the retrieval is honest — the emulator must bridge the approximation
+# gap between its MLP predictions and the true RT solver output.
+true_outputs = run_model(**true_params, **fixed, layer_type=1)
+true_albedo = np.array(true_outputs.albedo, dtype=np.float64)
 
 # Convolve to Sentinel-2 bands
 s2_true = to_platform(true_albedo, "sentinel2", flx_slr=emu.flx_slr)
@@ -44,7 +51,7 @@ obs_values = np.array([getattr(s2_true, b) for b in band_names])
 
 # Add realistic measurement noise
 rng = np.random.RandomState(42)
-noise_sigma = np.array([0.02, 0.02, 0.02, 0.03, 0.05])
+noise_sigma = np.full(len(band_names), 0.005)
 obs_noisy = obs_values + rng.normal(0, noise_sigma)
 obs_noisy = np.clip(obs_noisy, 0, 1)
 
@@ -59,11 +66,12 @@ print(f"\n  S2 bands (noisy): {dict(zip(band_names, obs_noisy.round(4)))}")
 print("\nStep 3: Retrieve ice properties\n")
 result = retrieve(
     observed=obs_noisy,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae"],
+    parameters=["rds", "black_carbon", "glacier_algae"],
     emulator=emu,
     platform="sentinel2",
     observed_band_names=band_names,
     obs_uncertainty=noise_sigma,
+    fixed_params=fixed,
 )
 print(result.summary())
 
@@ -88,7 +96,7 @@ for name in result.best_fit:
 print("\n\nStep 5: Use retrieved spectrum downstream\n")
 
 # Generate outputs from retrieved parameters via run_emulator()
-outputs = run_emulator(emu, **result.best_fit)
+outputs = run_emulator(emu, **result.best_fit, **fixed)
 print(f"  BBA (retrieved):     {outputs.BBA:.4f}")
 
 # Compute true BBA for comparison
@@ -119,7 +127,7 @@ if PLOT:
     ax1.legend()
 
     # Right: parameter comparison bar chart
-    names = list(true_params.keys())
+    names = list(result.best_fit.keys())
     true_vals = [true_params[n] for n in names]
     ret_vals = [result.best_fit[n] for n in names]
     x = np.arange(len(names))

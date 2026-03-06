@@ -3,11 +3,16 @@
 
 Demonstrates ``retrieve()`` with ``platform="sentinel2"`` (and other
 platforms), ``obs_uncertainty``, and working with band-space observations.
+
+Note: satellite band-mode retrieval provides limited spectral information
+(typically 4-5 broadband values), so it cannot constrain as many parameters
+as spectral-mode retrieval.  Fix poorly-constrained parameters (e.g.
+density, dust) via ``fixed_params`` for best results.
 """
 
 import numpy as np
 
-from biosnicar import to_platform
+from biosnicar import run_model, to_platform
 from biosnicar.emulator import Emulator
 from biosnicar.inverse import retrieve
 
@@ -16,10 +21,19 @@ PLOT = True
 # Load emulator
 emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
 
-# Generate synthetic Sentinel-2 observation from known parameters
-true_params = dict(rds=1000, rho=600, black_carbon=5000, glacier_algae=50000, dust=1000, solzen=50, direct=1)
-true_albedo = emu.predict(**true_params)
+# Observing conditions and density (known, not retrieved)
+fixed = {"solzen": 50, "direct": 1, "rho": 600}
+
+# Generate synthetic Sentinel-2 observation from the FULL FORWARD MODEL
+# (not the emulator) so that the retrieval is honest — the emulator must
+# bridge the approximation gap between its MLP and the true RT solver.
+true_params = dict(rds=1000, black_carbon=5000, glacier_algae=50000, dust=1000)
+true_outputs = run_model(**true_params, **fixed, layer_type=1)
+true_albedo = np.array(true_outputs.albedo, dtype=np.float64)
 s2_obs = to_platform(true_albedo, "sentinel2", flx_slr=emu.flx_slr)
+
+# Ice properties to retrieve (density fixed as known)
+ice_params = ["rds", "black_carbon", "dust", "glacier_algae"]
 
 # Use a subset of bands for retrieval
 band_names = ["B2", "B3", "B4", "B8", "B11"]
@@ -34,10 +48,11 @@ for name, val in zip(band_names, obs_values):
 print("\n=== Example 1: Sentinel-2 retrieval ===\n")
 result = retrieve(
     observed=obs_values,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae", "dust", "solzen", "direct"],
+    parameters=ice_params,
     emulator=emu,
     platform="sentinel2",
     observed_band_names=band_names,
+    fixed_params=fixed,
 )
 print(result.summary())
 print(f"\n  True:      {true_params}")
@@ -50,10 +65,11 @@ obs_unc = np.array([0.02, 0.02, 0.02, 0.03, 0.05])  # per-band 1-sigma
 
 result2 = retrieve(
     observed=obs_values,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae",  "dust", "solzen", "direct"],
+    parameters=ice_params,
     emulator=emu,
     platform="sentinel2",
     observed_band_names=band_names,
+    fixed_params=fixed,
     obs_uncertainty=obs_unc,
 )
 for name in result2.best_fit:
@@ -62,16 +78,16 @@ for name in result2.best_fit:
     )
 
 # ======================================================================
-# Example 3: Partial retrieval (fix density)
+# Example 3: Fewer free parameters (fix density and dust)
 # ======================================================================
-print("\n\n=== Example 3: Fix density, retrieve impurities ===\n")
+print("\n\n=== Example 3: Fix density and dust, retrieve rds + impurities ===\n")
 result3 = retrieve(
     observed=obs_values,
-    parameters=["rho", "rds", "black_carbon", "glacier_algae",  "dust"],
+    parameters=["rds", "black_carbon", "glacier_algae"],
     emulator=emu,
     platform="sentinel2",
     observed_band_names=band_names,
-    fixed_params={"solzen":50, "direct":1 },
+    fixed_params={**fixed, "dust": 1000},
 )
 for name in result3.best_fit:
     print(
@@ -88,10 +104,11 @@ l8_values = np.array([getattr(l8_obs, b) for b in l8_band_names])
 
 result4 = retrieve(
     observed=l8_values,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae", "dust", "solzen", "direct"],
+    parameters=ice_params,
     emulator=emu,
     platform="landsat8",
     observed_band_names=l8_band_names,
+    fixed_params=fixed,
 )
 print(f"  Landsat 8 retrieved rds: {result4.best_fit['rds']:.0f} (true: 1000)")
 print(f"  Converged: {result4.converged}")
@@ -106,10 +123,11 @@ modis_values = np.array([getattr(modis_obs, b) for b in modis_band_names])
 
 result5 = retrieve(
     observed=modis_values,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae", "dust", "solzen", "direct"],
+    parameters=ice_params,
     emulator=emu,
     platform="modis",
     observed_band_names=modis_band_names,
+    fixed_params=fixed,
 )
 print(f"  MODIS retrieved rds: {result5.best_fit['rds']:.0f} (true: 1000)")
 

@@ -132,13 +132,13 @@ class TestLatinHypercube:
 def tiny_emulator():
     """Build a small 2-parameter emulator for fast testing.
 
-    Uses only 100 samples — accuracy will be limited but sufficient
-    to test the API and round-trip behaviour.  Module-scoped so it
+    Uses 200 samples — sufficient for >0.9 R² despite some unphysical
+    spectra being dropped during training.  Module-scoped so it
     is built once and shared across all tests in this class.
     """
     emu = Emulator.build(
         params={"rds": (500, 3000), "black_carbon": (0, 50000)},
-        n_samples=100,
+        n_samples=200,
         progress=False,
         seed=42,
         layer_type=1,
@@ -523,6 +523,15 @@ class TestRetrieve:
             retrieve(
                 observed=np.zeros(480),
                 parameters=["rds"],
+            )
+
+    def test_binary_param_raises(self, tiny_emulator):
+        """Binary parameters like 'direct' cannot be continuously optimised."""
+        with pytest.raises(ValueError, match="Binary parameters"):
+            retrieve(
+                observed=np.zeros(480),
+                parameters=["rds", "direct"],
+                emulator=tiny_emulator,
             )
 
     def test_band_mode_without_band_names_raises(self, tiny_emulator):

@@ -9,13 +9,19 @@ from biosnicar.emulator import Emulator
 from biosnicar import run_emulator
 
 # Load the pre-built default emulator (ships with the repo)
-emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz") #glacier_ice_7_param_default
+emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
 
-# Predict spectral albedo
-albedo = emu.predict(rds=1000, rho=600, black_carbon=5000, glacier_algae=50000)
+# Predict spectral albedo (all 7 default emulator params required)
+albedo = emu.predict(
+    rds=1000, rho=600, black_carbon=5000, dust=1000,
+    glacier_algae=50000, direct=1, solzen=50,
+)
 
 # Or get a full Outputs object (BBA, BBAVIS, BBANIR, .to_platform())
-outputs = run_emulator(emu, rds=1000, rho=600, black_carbon=5000, glacier_algae=50000)
+outputs = run_emulator(
+    emu, rds=1000, rho=600, black_carbon=5000, dust=1000,
+    glacier_algae=50000, direct=1, solzen=50,
+)
 print(outputs.BBA)
 outputs.to_platform("sentinel2")
 ```
@@ -44,6 +50,22 @@ emu.save("my_emulator.npz")
 emu.save("glacier_ice.npz")       # ~100-200 KB, no pickle, no sklearn
 emu2 = Emulator.load("glacier_ice.npz")  # pure numpy, no sklearn required
 ```
+
+## Default Emulator
+
+The repository ships with a 7-parameter default emulator at `data/emulators/glacier_ice_7_param_default.npz`, built from 150,000 LHS samples with `layer_type=1` (solid ice). Its free parameters are:
+
+| Parameter       | Range          | Units       |
+| --------------- | -------------- | ----------- |
+| `rds`           | (100, 10000)   | um          |
+| `rho`           | (100, 900)     | kg/m³       |
+| `black_carbon`  | (0, 5000)      | ppb         |
+| `dust`          | (0, 500000)    | ppb         |
+| `glacier_algae` | (0, 500000)    | cells/mL    |
+| `direct`        | (0, 1)         | binary flag |
+| `solzen`        | (25, 65)       | degrees     |
+
+All 7 parameters must be provided when calling `predict()` or passed via `fixed_params` in `retrieve()`.
 
 ## API Reference
 
@@ -84,6 +106,40 @@ Predict for N parameter combinations.
 | `points`  | ndarray (N, n_params) | Rows are parameter sets in `param_names` order. |
 
 **Returns:** `np.ndarray` of shape `(N, 480)`.
+
+### `Emulator.verify(benchmark_params=None, n_points=20, seed=123, input_file="default", progress=True)`
+
+Measure emulator accuracy against the full forward model on held-out parameter sets.
+
+| Parameter          | Type       | Default     | Description                                                          |
+| ------------------ | ---------- | ----------- | -------------------------------------------------------------------- |
+| `benchmark_params` | list[dict] | None        | Explicit parameter sets to test. Auto-generated via LHS if omitted.  |
+| `n_points`         | int        | 20          | Number of LHS benchmark points (ignored if `benchmark_params` set).  |
+| `seed`             | int        | 123         | Random seed for benchmark generation (separate from training seed).  |
+| `input_file`       | str        | `"default"` | YAML config path for `run_model()`.                                  |
+| `progress`         | bool       | True        | Show progress bar for forward-model calls.                           |
+
+**Returns:** `VerificationResult`.
+
+### `VerificationResult`
+
+| Attribute            | Type         | Description                                                              |
+| -------------------- | ------------ | ------------------------------------------------------------------------ |
+| `n_points`           | int          | Number of benchmark parameter sets tested.                               |
+| `n_physical`         | int          | Points with physical forward-model output (used for aggregate stats).    |
+| `mae`                | float        | Mean absolute spectral error across all physical points and bands.       |
+| `max_err`            | float        | Worst-case absolute error.                                               |
+| `mae_bba`            | float        | Mean absolute broadband-albedo error.                                    |
+| `max_bba_err`        | float        | Maximum absolute broadband-albedo error.                                 |
+| `r2`                 | float        | R² over all predicted vs reference albedo values.                        |
+| `mae_per_point`      | ndarray (N,) | Per-point mean absolute spectral error.                                  |
+| `bba_err_per_point`  | ndarray (N,) | Per-point absolute BBA error.                                            |
+| `unphysical_indices` | list[int]    | Indices of points where the forward model produced unphysical albedo.    |
+| `physical_mask`      | ndarray (N,) | Boolean mask — True for physical points.                                 |
+| `emulator_albedos`   | ndarray      | Emulator predictions (N, 480).                                           |
+| `reference_albedos`  | ndarray      | Forward-model reference (N, 480).                                        |
+
+`result.summary()` returns a human-readable string.
 
 ### `Emulator.save(path)` / `Emulator.load(path)`
 
@@ -183,8 +239,16 @@ LHS fills parameter space uniformly with far fewer samples than a Cartesian grid
 
 ### Parameter snapping
 
-- `rds` values are snapped to the nearest lookup-table entry (step 5 for rds < 100, step 10 for 100-5000, step 500 for >5000)
-- `direct` is snapped to {0, 1} — the MLP sees equal numbers of clear/cloudy samples
+- **`rds`** values are snapped to the nearest lookup-table entry (step 5 for rds < 100, step 10 for 100-5000, step 500 for >5000)
+- **`direct`** is snapped to {0, 1} — the MLP sees approximately equal numbers of clear/cloudy samples
+- **`solzen`** is rounded to the nearest integer and clamped to [1, 89] degrees, matching the available irradiance data keys
+- Other integer parameters (if present) are rounded to the nearest integer
+
+### Unphysical spectrum filtering
+
+The RT solver occasionally produces negative albedo values at extreme parameter combinations (numerical instability in the two-stream equations at wavelengths where single-scattering albedo approaches 0 or 1). Including these in training would distort the PCA basis and degrade MLP accuracy.
+
+Spectra with any value outside [0, 1.01] are automatically excluded from training, with a warning reporting the count. The 1% tolerance above unity accounts for minor numerical overshoot that is physically benign.
 
 ### MLP training
 
@@ -231,6 +295,7 @@ Build time is dominated by forward model runs (~50 ms each). MLP training adds <
 - **Expected R²**: >0.999 with 5000+ training samples for typical glacier ice configurations
 - **Extrapolation warning**: the emulator should not be used outside its training bounds. `predict()` clips inputs and warns if out of bounds.
 - **PCA artefacts**: extreme parameter combinations (very high impurity loading) may produce small spectral artefacts. Increase `n_samples` to mitigate.
+- **Unphysical training data**: the forward model produces unphysical albedo at some extreme parameter combinations. These are automatically filtered during training, but very small training sets may lose a significant fraction of samples. Increase `n_samples` if many are dropped.
 - **No RT-solver-only outputs**: `heat_rt` and `absorbed_flux_per_layer` are not available from the emulator (only from the full forward model).
 
 ## See Also
@@ -239,3 +304,4 @@ Build time is dominated by forward model runs (~50 ms each). MLP training adds <
 - [examples/05_emulator_predict.py](../examples/05_emulator_predict.py) — predictions and speed comparison
 - [examples/06_emulator_save_load.py](../examples/06_emulator_save_load.py) — save/load and metadata inspection
 - [docs/INVERSION.md](INVERSION.md) — using the emulator for parameter retrieval
+- [docs/METHODS.md](METHODS.md) — detailed technical methods (paper-quality)

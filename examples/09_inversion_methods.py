@@ -11,17 +11,24 @@ import time
 
 import numpy as np
 
+from biosnicar import run_model
 from biosnicar.emulator import Emulator
 from biosnicar.inverse import retrieve
 
 PLOT = False
 MCMC = False
 
-# Load emulator and generate synthetic observation
+# Load emulator and generate synthetic observation from the FULL FORWARD
+# MODEL (not the emulator) so that the retrieval is honest.
 emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
-true_params = dict(rds=1000, rho=600, black_carbon=5000, glacier_algae=50000)
-observed = emu.predict(**true_params)
-parameters = ["rds", "rho", "black_carbon", "glacier_algae"]
+
+# Observing conditions (known, not retrieved)
+fixed = {"solzen": 50, "direct": 1}
+
+true_params = dict(rds=1000, rho=600, black_carbon=5000, glacier_algae=50000, dust=1000)
+true_outputs = run_model(**true_params, **fixed, layer_type=1)
+observed = np.array(true_outputs.albedo, dtype=np.float64)
+parameters = ["rds", "rho", "black_carbon", "glacier_algae", "dust"]
 
 print(f"True parameters: {true_params}\n")
 
@@ -38,6 +45,7 @@ for method in methods:
         parameters=parameters,
         emulator=emu,
         method=method,
+        fixed_params=fixed,
     )
     elapsed = time.time() - t0
     results[method] = (result, elapsed)
@@ -99,6 +107,7 @@ if MCMC:
         mcmc_walkers=32,
         mcmc_steps=1000,
         mcmc_burn=200,
+        fixed_params=fixed,
     )
     elapsed = time.time() - t0
     print(f"  Time:       {elapsed:.1f} s")

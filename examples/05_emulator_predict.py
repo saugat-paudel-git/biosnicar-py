@@ -24,8 +24,8 @@ print(f"  {emu!r}")
 print(f"  Parameters: {emu.param_names}")
 print(f"  Bounds:     {emu.bounds}")
 
-result = emu.verify(n_points=1000)
-print(result.summary())
+# result = emu.verify(n_points=1000)
+# print(result.summary())
 
 # ======================================================================
 # Example 2: Single prediction with predict()
