@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
 """Comparison of optimisation methods for inversion.
 
-Runs the same retrieval problem with L-BFGS-B, Nelder-Mead, and
-differential evolution, comparing speed, accuracy, and convergence.
+This script runs the same SSA retrieval problem with four different
+optimisation methods and compares their speed, accuracy, and convergence
+characteristics.  This helps you choose the right method for your use case.
 
-Set MCMC = True to include MCMC (slower).
+The methods compared are:
+  - L-BFGS-B (default): hybrid DE pre-search + quasi-Newton polish.
+    Fast and accurate for most problems.
+  - Nelder-Mead: derivative-free simplex. More robust to noisy cost
+    surfaces (e.g. when using the direct forward model).
+  - differential_evolution: global stochastic search. Slower but explores
+    the full parameter space — use when the initial guess is poor or the
+    cost surface is multimodal.
+  - mcmc (optional): full Bayesian posterior sampling via emcee. Gives
+    publication-quality uncertainty estimates and reveals parameter
+    correlations. Much slower.
+
+Set MCMC = True to include MCMC (adds ~30-60 seconds).
 """
 
 import time
@@ -14,27 +27,53 @@ import numpy as np
 from biosnicar import run_model
 from biosnicar.emulator import Emulator
 from biosnicar.inverse import retrieve
+from biosnicar.inverse.result import _compute_ssa
 
 PLOT = False
 MCMC = False
 
-# Load emulator and generate synthetic observation from the FULL FORWARD
-# MODEL (not the emulator) so that the retrieval is honest.
+# ======================================================================
+# Setup: load emulator and generate a synthetic observation
+# ======================================================================
+
+# Load the pre-built 7-parameter glacier ice emulator.
 emu = Emulator.load("data/emulators/glacier_ice_7_param_default.npz")
 
-# Observing conditions (known, not retrieved)
-fixed = {"solzen": 50, "direct": 1}
+# Parameters that are known a priori and will NOT be retrieved.
+# Dust is fixed at 1000 ppb (low spectral sensitivity — see docs).
+fixed = {"solzen": 50, "direct": 1, "dust": 1000}
 
-true_params = dict(rds=1000, rho=600, black_carbon=5000, glacier_algae=50000, dust=1000)
+# Generate a synthetic observation from the FULL FORWARD MODEL (not the
+# emulator) for an honest comparison — the retrieval must bridge the
+# emulator's approximation gap.
+true_params = dict(rds=1000, rho=600, black_carbon=5000, glacier_algae=50000)
 true_outputs = run_model(**true_params, **fixed, layer_type=1)
 observed = np.array(true_outputs.albedo, dtype=np.float64)
-parameters = ["rds", "rho", "black_carbon", "glacier_algae", "dust"]
 
-print(f"True parameters: {true_params}\n")
+# SSA replaces (rds, rho) as the physically-meaningful ice optical
+# parameter.  It eliminates the rds/rho degeneracy and gives ~5.5%
+# error compared to ~73% for rds and ~33% for rho individually.
+true_ssa = _compute_ssa(true_params["rds"], true_params["rho"])
+parameters = ["ssa", "black_carbon", "glacier_algae"]
+
+# Build a dict of true values in retrieval parameter space for error
+# computation.
+true_vals = {
+    "ssa": true_ssa,
+    "black_carbon": true_params["black_carbon"],
+    "glacier_algae": true_params["glacier_algae"],
+}
+
+print(f"True parameters: SSA={true_ssa:.4f} m2/kg, BC={true_params['black_carbon']}, "
+      f"GA={true_params['glacier_algae']}\n")
 
 # ======================================================================
 # Compare gradient-based and derivative-free methods
 # ======================================================================
+# We run each method on the same problem and record the result plus
+# elapsed wall-clock time.  All methods use the same emulator, bounds,
+# and fixed parameters — only the optimisation strategy differs.
+
 methods = ["L-BFGS-B", "Nelder-Mead", "differential_evolution"]
 results = {}
 
@@ -56,26 +95,31 @@ for method in methods:
     print(f"  Cost:       {result.cost:.6f}")
     print(f"  Func evals: {result.n_function_evals}")
     for name in parameters:
-        err = abs(result.best_fit[name] - true_params[name])
+        err = abs(result.best_fit[name] - true_vals[name])
         print(
-            f"  {name:25s} = {result.best_fit[name]:10.1f}  "
-            f"(err={err:.1f}, unc={result.uncertainty[name]:.1f})"
+            f"  {name:25s} = {result.best_fit[name]:10.4f}  "
+            f"(err={err:.4f}, unc={result.uncertainty[name]:.4f})"
         )
+    print(f"  Internal decomposition: {result.derived}")
     print()
 
 # ======================================================================
 # Summary table
 # ======================================================================
+# A compact comparison of the three methods.  The SSA error is the
+# absolute difference between the retrieved and true SSA (in m²/kg).
+# Lower cost = better spectral fit; fewer evals = faster.
+
 print("=== Summary ===\n")
 print(
-    f"  {'Method':30s} {'Time (s)':>10s} {'Cost':>12s} {'Evals':>8s} {'rds err':>10s}"
+    f"  {'Method':30s} {'Time (s)':>10s} {'Cost':>12s} {'Evals':>8s} {'SSA err':>10s}"
 )
 print(f"  {'-' * 30} {'-' * 10} {'-' * 12} {'-' * 8} {'-' * 10}")
 for method in methods:
     r, t = results[method]
-    rds_err = abs(r.best_fit["rds"] - true_params["rds"])
+    ssa_err = abs(r.best_fit["ssa"] - true_ssa)
     print(
-        f"  {method:30s} {t:10.3f} {r.cost:12.6f} {r.n_function_evals:8d} {rds_err:10.1f}"
+        f"  {method:30s} {t:10.3f} {r.cost:12.6f} {r.n_function_evals:8d} {ssa_err:10.4f}"
     )
 
 # ======================================================================
@@ -96,6 +140,16 @@ print("                           uncertainty or when parameters are degenerate.
 # ======================================================================
 # MCMC (optional, slower)
 # ======================================================================
+# MCMC (Markov Chain Monte Carlo) samples the full posterior distribution
+# rather than finding a single point estimate.  This gives:
+# - Posterior median and standard deviation (more robust uncertainty)
+# - Full chains for corner plots and correlation analysis
+# - Detection of bimodal or skewed posteriors
+#
+# The tradeoff is speed: MCMC requires ~50,000-200,000 emulator calls vs
+# ~1,000-3,000 for L-BFGS-B.  With the microsecond emulator this is
+# still only ~30-60 seconds.
+
 if MCMC:
     print("\n=== MCMC (32 walkers, 1000 steps, 200 burn-in) ===\n")
     t0 = time.time()
@@ -115,18 +169,21 @@ if MCMC:
     print(f"  Chain shape: {result_mcmc.chains.shape}")
     for name in parameters:
         print(
-            f"  {name:25s} = {result_mcmc.best_fit[name]:10.1f} "
-            f"+/- {result_mcmc.uncertainty[name]:.1f}"
+            f"  {name:25s} = {result_mcmc.best_fit[name]:10.4f} "
+            f"+/- {result_mcmc.uncertainty[name]:.4f}"
         )
 
+    # Trace plots show the MCMC walkers exploring parameter space over
+    # time.  Well-mixed chains look like "hairy caterpillars" — the
+    # walkers should be exploring the same region and not stuck in
+    # separate modes.
     if PLOT:
         import matplotlib.pyplot as plt
 
-        # Trace plot
         fig, axes = plt.subplots(len(parameters), 1, figsize=(8, 2.5 * len(parameters)))
         for i, (ax, name) in enumerate(zip(axes, parameters)):
             ax.plot(result_mcmc.chains[:, :, i], alpha=0.3, linewidth=0.5)
-            ax.axhline(true_params[name], color="r", linestyle="--", label="True")
+            ax.axhline(true_vals[name], color="r", linestyle="--", label="True")
             ax.set_ylabel(name)
             ax.legend(fontsize=8)
         axes[-1].set_xlabel("Step")
@@ -137,6 +194,8 @@ if MCMC:
 elif PLOT:
     import matplotlib.pyplot as plt
 
+    # Compare the retrieved spectra from the three optimisation methods.
+    # They should be nearly identical if all converged to the same minimum.
     wavelengths = np.arange(0.205, 4.999, 0.01)
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(wavelengths, observed, "k-", label="Observed", linewidth=2)
@@ -154,7 +213,7 @@ elif PLOT:
     ax.set_ylabel("Albedo")
     ax.set_xlim(0.2, 2.5)
     ax.set_ylim(0, 1.05)
-    ax.set_title("Retrieved spectra from different optimisers")
+    ax.set_title("Retrieved spectra from different optimisers (SSA mode)")
     ax.legend()
     fig.tight_layout()
     plt.show()
