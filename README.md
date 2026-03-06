@@ -128,7 +128,7 @@ parameter_sweep(params={"black_carbon": [0, 1000, 10000]})
 Emulator.build(params={"rds": (100, 5000), "black_carbon": (0, 100000)}, ...)
 
 # Inversion
-retrieve(observed=obs, parameters=["rds", "black_carbon"], emulator=emu)
+retrieve(observed=obs, parameters=["ssa", "black_carbon"], emulator=emu)
 ```
 
 **Adding a new impurity type:**
@@ -236,18 +236,20 @@ emu.save("my_emulator.npz")
 
 ### Inversion — Retrieve Ice Properties from Observations
 
-The inverse module retrieves ice physical properties from observed albedo (spectral or satellite bands) using emulator-powered optimisation:
+The inverse module retrieves ice physical properties from observed albedo (spectral or satellite bands) using emulator-powered optimisation. The recommended approach is to retrieve **specific surface area (SSA)** — the physically meaningful optical parameter — rather than bubble radius and density individually. SSA is much better constrained (~5.5% error vs ~73% and ~33% for rds and rho individually):
 
 ```python
 from biosnicar.inverse import retrieve
 
-# Spectral retrieval (480-band observed albedo)
+# SSA retrieval (480-band observed albedo)
 result = retrieve(
     observed=measured_albedo,
-    parameters=["rds", "rho", "black_carbon", "glacier_algae"],
+    parameters=["ssa", "black_carbon", "glacier_algae"],
     emulator=emu,
+    fixed_params={"direct": 1, "solzen": 50},
 )
 print(result.summary())
+print(result.best_fit["ssa"])   # m²/kg
 ```
 
 ```python
@@ -256,15 +258,16 @@ import numpy as np
 # Satellite band retrieval (e.g. Sentinel-2)
 result = retrieve(
     observed=np.array([0.82, 0.78, 0.75, 0.45, 0.03]),
-    parameters=["rds", "rho", "black_carbon", "glacier_algae"],
+    parameters=["ssa", "black_carbon", "glacier_algae"],
     emulator=emu,
     platform="sentinel2",
     observed_band_names=["B2", "B3", "B4", "B8", "B11"],
     obs_uncertainty=np.array([0.02, 0.02, 0.02, 0.03, 0.05]),
+    fixed_params={"direct": 1, "solzen": 50, "dust": 1000},
 )
 ```
 
-Four optimisation methods: `L-BFGS-B` (fast default), `Nelder-Mead` (derivative-free), `differential_evolution` (global search), `mcmc` (full Bayesian posterior). Use `fixed_params` to constrain known parameters (e.g. `fixed_params={"rho": 750}`). Full documentation: [docs/INVERSION.md](docs/INVERSION.md). Examples: [examples/07_inversion_spectral.py](examples/07_inversion_spectral.py), [examples/08_inversion_satellite.py](examples/08_inversion_satellite.py).
+Four optimisation methods: `L-BFGS-B` (fast default), `Nelder-Mead` (derivative-free), `differential_evolution` (global search), `mcmc` (full Bayesian posterior). Use `fixed_params` to constrain known parameters. If independent density measurements are available, fix rho and retrieve rds directly instead of SSA. Full documentation: [docs/INVERSION.md](docs/INVERSION.md). Examples: [examples/07_inversion_spectral.py](examples/07_inversion_spectral.py), [examples/08_inversion_satellite.py](examples/08_inversion_satellite.py).
 
 We have also maintained a separate version of the biosnicar codebase that uses a "functional" programming style rather than the object-oriented approach taken here. We refer to this as biosnicar Classic and it is available in the `classic` branch of this repository. it might be useful for people already familiar with FORTRAN or Matlab implementations from previous literature. The two branches are entirely equivalent in their simulations but very different in their programming style. The object-oriented approach is preferred because it is more Pythonic, more flexible and easier to debug.
 

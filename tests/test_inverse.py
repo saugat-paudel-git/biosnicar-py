@@ -557,6 +557,24 @@ class TestRetrieve:
         assert "black_carbon" in s
         assert "L-BFGS-B" in s
 
+    def test_ssa_with_rds_raises(self, tiny_emulator):
+        """Cannot retrieve SSA alongside rds."""
+        with pytest.raises(ValueError, match="Cannot retrieve 'ssa' alongside"):
+            retrieve(
+                observed=np.zeros(480),
+                parameters=["ssa", "rds"],
+                emulator=tiny_emulator,
+            )
+
+    def test_ssa_with_rho_raises(self, tiny_emulator):
+        """Cannot retrieve SSA alongside rho."""
+        with pytest.raises(ValueError, match="Cannot retrieve 'ssa' alongside"):
+            retrieve(
+                observed=np.zeros(480),
+                parameters=["ssa", "rho"],
+                emulator=tiny_emulator,
+            )
+
     def test_direct_forward_fn_mode(self, tiny_emulator):
         """Direct forward function mode (no emulator) should work."""
         # Use the tiny_emulator.predict as a "direct" forward function
@@ -646,3 +664,108 @@ class TestBackwardCompatImports:
         from biosnicar.inverse import Emulator as E1
         from biosnicar.emulator import Emulator as E2
         assert E1 is E2
+
+
+# ── SSA Retrieval ──────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def ssa_emulator():
+    """Build a 3-parameter emulator (rds, rho, black_carbon) for SSA tests.
+
+    Module-scoped — built once and shared across all SSA tests.
+    """
+    emu = Emulator.build(
+        params={"rds": (500, 3000), "rho": (200, 800), "black_carbon": (0, 50000)},
+        n_samples=300,
+        progress=False,
+        seed=42,
+        layer_type=1,
+        solzen=50,
+    )
+    return emu
+
+
+class TestSSARetrieval:
+    """Tests for SSA as a retrievable parameter."""
+
+    def test_ssa_retrieval_smoke(self, ssa_emulator):
+        """SSA retrieval should converge and return a positive SSA."""
+        from biosnicar.inverse.result import _compute_ssa
+
+        true_rds, true_rho = 1500.0, 500.0
+        true_ssa = _compute_ssa(true_rds, true_rho)
+        obs = ssa_emulator.predict(rds=true_rds, rho=true_rho, black_carbon=0)
+
+        result = retrieve(
+            observed=obs,
+            parameters=["ssa"],
+            emulator=ssa_emulator,
+            fixed_params={"black_carbon": 0},
+        )
+        assert result.converged
+        assert result.best_fit["ssa"] > 0
+        # SSA should be within 50% of true value
+        assert abs(result.best_fit["ssa"] - true_ssa) / true_ssa < 0.5
+
+    def test_ssa_derived_populated(self, ssa_emulator):
+        """result.derived should contain rds_internal and rho_ref."""
+        obs = ssa_emulator.predict(rds=1500, rho=500, black_carbon=0)
+        result = retrieve(
+            observed=obs,
+            parameters=["ssa"],
+            emulator=ssa_emulator,
+            fixed_params={"black_carbon": 0},
+        )
+        assert "rds_internal" in result.derived
+        assert "rho_ref" in result.derived
+        assert result.derived["rds_internal"] > 0
+        assert result.derived["rho_ref"] > 0
+
+    def test_ssa_rho_override(self, ssa_emulator):
+        """ssa_rho kwarg should override the default reference density."""
+        obs = ssa_emulator.predict(rds=1500, rho=500, black_carbon=0)
+        result = retrieve(
+            observed=obs,
+            parameters=["ssa"],
+            emulator=ssa_emulator,
+            fixed_params={"black_carbon": 0},
+            ssa_rho=700.0,
+        )
+        assert result.derived["rho_ref"] == 700.0
+        assert result.converged
+
+    def test_ssa_with_impurity(self, ssa_emulator):
+        """SSA can be retrieved alongside impurity parameters."""
+        obs = ssa_emulator.predict(rds=1500, rho=500, black_carbon=5000)
+        result = retrieve(
+            observed=obs,
+            parameters=["ssa", "black_carbon"],
+            emulator=ssa_emulator,
+        )
+        assert "ssa" in result.best_fit
+        assert "black_carbon" in result.best_fit
+        assert result.predicted_albedo.shape == (480,)
+
+    def test_ssa_uncertainty_finite(self, ssa_emulator):
+        """SSA uncertainty should be finite and positive."""
+        obs = ssa_emulator.predict(rds=1500, rho=500, black_carbon=0)
+        result = retrieve(
+            observed=obs,
+            parameters=["ssa"],
+            emulator=ssa_emulator,
+            fixed_params={"black_carbon": 0},
+        )
+        assert np.isfinite(result.uncertainty["ssa"])
+        assert result.uncertainty["ssa"] > 0
+
+    def test_derived_empty_without_ssa(self, tiny_emulator):
+        """result.derived should be empty when SSA is not retrieved."""
+        obs = tiny_emulator.predict(rds=1000, black_carbon=5000)
+        result = retrieve(
+            observed=obs,
+            parameters=["rds"],
+            emulator=tiny_emulator,
+            fixed_params={"black_carbon": 5000},
+        )
+        assert result.derived == {}

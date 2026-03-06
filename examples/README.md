@@ -10,10 +10,10 @@ Self-contained example scripts covering the full BioSNICAR workflow. Each script
 | 04  | [emulator_build.py](04_emulator_build.py)           | Building custom emulators, inspecting properties, accuracy validation                   |
 | 05  | [emulator_predict.py](05_emulator_predict.py)       | Load default emulator, `predict()`, `predict_batch()`, `run_emulator()`, speed test     |
 | 06  | [emulator_save_load.py](06_emulator_save_load.py)   | Save/load roundtrip, metadata inspection, `.npz` portability                            |
-| 07  | [inversion_spectral.py](07_inversion_spectral.py)   | Spectral retrieval with `retrieve()`, `fixed_params`, `wavelength_mask`, regularization |
-| 08  | [inversion_satellite.py](08_inversion_satellite.py) | Band-mode retrieval with Sentinel-2, Landsat 8, MODIS, `obs_uncertainty`                |
-| 09  | [inversion_methods.py](09_inversion_methods.py)     | L-BFGS-B, Nelder-Mead, differential evolution, MCMC comparison                          |
-| 10  | [end_to_end_workflow.py](10_end_to_end_workflow.py) | Full pipeline: load emulator, synthetic S2 observation, retrieve, validate              |
+| 07  | [inversion_spectral.py](07_inversion_spectral.py)   | SSA spectral retrieval with `retrieve()`, `fixed_params`, `wavelength_mask`, regularization |
+| 08  | [inversion_satellite.py](08_inversion_satellite.py) | SSA band-mode retrieval with Sentinel-2, Landsat 8, MODIS, `obs_uncertainty`                |
+| 09  | [inversion_methods.py](09_inversion_methods.py)     | L-BFGS-B, Nelder-Mead, differential evolution, MCMC comparison (SSA mode)                   |
+| 10  | [end_to_end_workflow.py](10_end_to_end_workflow.py) | Full pipeline: load emulator, synthetic S2 observation, SSA retrieval, validate              |
 
 ## Running
 

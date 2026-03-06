@@ -188,7 +188,7 @@ These are available as attributes of the returned `BandResult` object where the 
 
 ### 4.1 Problem Formulation
 
-Given an observed albedo spectrum (or satellite band values), the inversion estimates the physical parameters theta = (rds, rho, black_carbon, ...) that best explain the observations. This is formulated as a least-squares minimisation:
+Given an observed albedo spectrum (or satellite band values), the inversion estimates the physical parameters theta = (SSA, black_carbon, glacier_algae, ...) that best explain the observations. This is formulated as a least-squares minimisation:
 
 ```
 theta* = argmin_theta  J(theta)
@@ -250,9 +250,66 @@ sigma_linear ≈ (x + 1) * ln(10) * sigma_log10
 
 User-facing inputs (bounds, x0, results) are always in linear space; the log transformation is applied and reversed internally.
 
-### 4.4 Optimisation Methods
+### 4.4 SSA Parameterisation
 
-#### 4.4.1 L-BFGS-B with Hybrid DE Pre-Search (Default)
+#### 4.4.1 The rds/rho Degeneracy
+
+The spectral albedo of bubbly ice in the NIR is controlled primarily by the specific surface area (SSA), defined for spherical air bubbles as:
+
+```
+SSA = 3 * phi / (r * rho)    [m² kg⁻¹]
+```
+
+where phi = 1 - rho/917 is the air volume fraction, r is the bubble radius in metres, and rho is the bulk ice density in kg m^-3.  SSA represents the total air-ice interface area per unit mass — the quantity that determines the scattering optical depth in the geometric-optics limit.
+
+Many different (rds, rho) combinations produce the same SSA and therefore nearly identical spectra, creating a **many-to-one degeneracy**.  In (rds, rho) space, the cost surface has a continuous valley along curves of constant SSA.  Optimisers wander freely along this valley, producing large individual errors in rds and rho despite the underlying SSA being well constrained.
+
+Quantitatively, in synthetic retrieval experiments (emulator-generated spectra, L-BFGS-B optimisation, 5 parameters):
+
+| Metric          | Typical error  |
+| --------------- | -------------- |
+| rds (individual)| ~73%           |
+| rho (individual)| ~33%           |
+| **SSA (derived from rds, rho)** | **~5.5%** |
+
+The large individual errors cancel in the SSA combination because the optimiser moves along the valley floor — rds increases while rho decreases (or vice versa) in a way that preserves SSA.
+
+#### 4.4.2 SSA as a Free Parameter
+
+To exploit this structure, the inversion supports retrieving SSA directly as a free parameter instead of rds and rho.  When `"ssa"` is in the `parameters` list:
+
+1. **Optimisation in SSA space.**  The optimiser sees SSA as a single scalar parameter.  The 2D valley in (rds, rho) space collapses to a clean 1D minimum in SSA space.
+
+2. **Internal decomposition.**  Each emulator evaluation requires physical (rds, rho) values.  The SSA forward wrapper decomposes SSA into (rds, rho) using a reference density rho_ref:
+
+```
+rds_um = 3 * (1 - rho_ref / 917) / (SSA * rho_ref) / 1e-6
+```
+
+The emulator is called with `rds = rds_um` and `rho = rho_ref`.
+
+3. **Arbitrary reference density.**  The choice of rho_ref has minimal impact on the predicted spectrum because SSA dominates the spectral response.  Second-order effects (the asymmetry parameter g and wavelength-dependent extinction efficiency Q_sca depend weakly on the individual bubble radius) are small compared to the emulator's inherent approximation error (~0.005 albedo units).  The reference density defaults to the midpoint of the emulator's rho training range.
+
+4. **Bounds from emulator.**  SSA bounds are auto-computed from the emulator's rds training range and rho_ref, ensuring the decomposed rds stays within the emulator's valid region:
+
+```
+SSA_max = _compute_ssa(rds_min, rho_ref)    # small bubbles → high SSA
+SSA_min = _compute_ssa(rds_max, rho_ref)    # large bubbles → low SSA
+```
+
+5. **Log-space optimisation.**  SSA spans ~0.01 to ~300 m² kg^-1 (four orders of magnitude from dense ice with large bubbles to fresh snow), so it is included in the set of log-space-transformed parameters alongside impurity concentrations.
+
+#### 4.4.3 Constraint: Mutual Exclusion with rds and rho
+
+`"ssa"` cannot appear alongside `"rds"` or `"rho"` in the free parameter list.  This constraint is enforced with a `ValueError` because:
+
+- SSA is a function of (rds, rho) — retrieving all three would introduce a degenerate third dimension.
+- If rho is independently known (e.g. from ice core measurements), the user should fix rho via `fixed_params` and retrieve `rds` directly.  The degeneracy is broken by the external constraint, and rds is well-determined.
+- If neither rds nor rho is independently known, SSA is the physically meaningful quantity to retrieve.
+
+### 4.5 Optimisation Methods
+
+#### 4.5.1 L-BFGS-B with Hybrid DE Pre-Search (Default)
 
 The default optimisation uses a two-phase strategy:
 
@@ -268,7 +325,7 @@ Convergence criteria:
 - L-BFGS-B: ftol = 1e-12 (relative function tolerance)
 - Maximum 2000 iterations
 
-#### 4.4.2 Nelder-Mead
+#### 4.5.2 Nelder-Mead
 
 The Nelder-Mead simplex method is a derivative-free optimiser that maintains a simplex of n+1 points in n-dimensional parameter space and evolves it via reflection, expansion, contraction, and shrinkage operations. It is more robust than L-BFGS-B when the cost surface is noisy (e.g. when using the direct forward model instead of the smooth emulator) or when the gradient is unreliable.
 
@@ -276,7 +333,7 @@ Since `scipy.optimize.minimize` does not natively support bounds for Nelder-Mead
 
 Convergence criteria: fatol = 1e-12, xatol = 1e-10.
 
-#### 4.4.3 Differential Evolution (Standalone)
+#### 4.5.3 Differential Evolution (Standalone)
 
 For problems where the cost surface is known to be multimodal or when no good initial guess is available, standalone DE provides a rigorous global search. The implementation uses scipy's `differential_evolution` with:
 - maxiter = 1000
@@ -286,7 +343,7 @@ For problems where the cost surface is known to be multimodal or when no good in
 
 DE is slower than L-BFGS-B (typically 500-5000 evaluations) but guarantees convergence to the global minimum given sufficient iterations.
 
-#### 4.4.4 MCMC (Markov Chain Monte Carlo)
+#### 4.5.4 MCMC (Markov Chain Monte Carlo)
 
 For full Bayesian uncertainty quantification, the `emcee` ensemble sampler (Foreman-Mackey et al., 2013) explores the posterior distribution. The implementation uses:
 
@@ -305,15 +362,15 @@ Post-processing:
 
 The full chain array is returned for downstream analysis (corner plots, marginal distributions, parameter correlations).
 
-### 4.5 Binary Parameter Handling
+### 4.6 Binary Parameter Handling
 
 The `direct` parameter (sky condition: 0 = diffuse, 1 = direct beam) is a binary flag that cannot be meaningfully optimised by continuous methods. Attempting to minimise over a continuous [0, 1] range for a parameter that the forward model treats as a discrete switch produces an undefined gradient and pathological optimiser behaviour (the cost surface is flat everywhere except at the two valid values).
 
 The inversion module explicitly forbids including binary parameters in the `parameters` list, raising a `ValueError` with guidance to pass them via `fixed_params` instead. This design choice reflects the physical reality: sky conditions are typically known from meteorological observations or assumed for a given scene.
 
-### 4.6 Uncertainty Estimation
+### 4.7 Uncertainty Estimation
 
-#### 4.6.1 Hessian-Based Uncertainty (Default)
+#### 4.7.1 Hessian-Based Uncertainty (Default)
 
 After optimisation (L-BFGS-B, Nelder-Mead, or DE), parameter uncertainties are estimated from the Hessian of the cost function at the optimum. The procedure is:
 
@@ -337,7 +394,7 @@ Cov(theta) ≈ H^-1
 
 **Step size rationale**: h = 1e-4 * parameter range balances truncation error (h too large) against floating-point cancellation error (h too small). For typical parameter ranges of O(100-500,000), this gives steps of O(0.01-50), well above machine epsilon but small enough for the quadratic approximation to hold.
 
-#### 4.6.2 Log-Space Uncertainty Propagation
+#### 4.7.2 Log-Space Uncertainty Propagation
 
 For parameters optimised in log10(x + 1) space, the Hessian is computed in log space (where the cost surface is better conditioned) and then transformed to linear-space uncertainties via:
 
@@ -349,9 +406,9 @@ This first-order propagation follows from the derivative of the inverse transfor
 
 The consequence is that uncertainty scales with the retrieved value — a concentration of 100 ppb might have sigma = 50 ppb, while 10,000 ppb might have sigma = 5,000 ppb. This reflects the physical reality that spectral sensitivity to impurities is approximately proportional to concentration on a logarithmic scale.
 
-### 4.7 Cost Function Details
+### 4.8 Cost Function Details
 
-#### 4.7.1 Spectral Cost
+#### 4.8.1 Spectral Cost
 
 ```
 J_spectral = Sum_{i=1}^{480} [ (alpha_hat_i - alpha_obs_i)^2 / sigma_i^2 ]
@@ -359,7 +416,7 @@ J_spectral = Sum_{i=1}^{480} [ (alpha_hat_i - alpha_obs_i)^2 / sigma_i^2 ]
 
 When `obs_uncertainty` is not provided, sigma_i = 1 for all bands (unweighted least squares). When a `wavelength_mask` is provided, only bands where the mask is True contribute to the sum.
 
-#### 4.7.2 Band Cost
+#### 4.8.2 Band Cost
 
 ```
 J_band = Sum_{j=1}^{N_bands} [ (alpha_hat_j - alpha_obs_j)^2 / sigma_j^2 ]
@@ -367,7 +424,7 @@ J_band = Sum_{j=1}^{N_bands} [ (alpha_hat_j - alpha_obs_j)^2 / sigma_j^2 ]
 
 where alpha_hat_j is obtained by SRF convolution (Section 3.2) of the predicted 480-band spectrum to the j-th satellite band. This formulation avoids the ill-posed problem of interpolating a continuous spectrum from broadband observations — the forward model always operates in full spectral resolution.
 
-#### 4.7.3 Regularisation Term
+#### 4.8.3 Regularisation Term
 
 When Gaussian priors are specified:
 
@@ -377,25 +434,26 @@ J_reg = Sum_k [ (theta_k - mu_k)^2 / sigma_prior,k^2 ]
 
 This is added to either the spectral or band cost. The prior mean mu_k and standard deviation sigma_prior,k encode independent knowledge about parameter values. For example, if field density measurements give rho = 700 +/- 50 kg m^-3, setting `regularization={"rho": (700, 50)}` constrains the retrieval to be consistent with this observation.
 
-### 4.8 Practical Considerations for Retrieval
+### 4.9 Practical Considerations for Retrieval
 
-#### 4.8.1 Parameter Sensitivity and Degeneracies
+#### 4.9.1 Parameter Sensitivity and Degeneracies
 
 Not all parameters are equally well constrained by spectral or band observations:
 
-- **Grain radius (`rds`)**: Strong spectral signature in the NIR (0.8-2.5 um). Well constrained from both spectral and band observations.
-- **Ice density (`rho`)**: Affects overall optical depth. Partially degenerate with layer thickness (`dz`). Best constrained when independent density measurements are available.
+- **SSA (specific surface area)**: The dominant control on NIR albedo shape. Very well constrained from both spectral and band observations. Retrieving SSA directly avoids the rds/rho degeneracy and yields ~5.5% error in synthetic tests vs ~73% for rds and ~33% for rho individually. **Recommended as the primary ice optical parameter** unless independent density measurements are available.
+- **Grain radius (`rds`)**: Strong spectral signature in the NIR (0.8-2.5 um). Well constrained *only when rho is fixed*. When both rds and rho are free, they are degenerate (see Section 4.4.1).
+- **Ice density (`rho`)**: Affects overall optical depth. Degenerate with rds (Section 4.4.1) and with layer thickness (`dz`). Best constrained when independent density measurements are available.
 - **Black carbon**: Broadband visible darkening. Well constrained from spectral data. Partially degenerate with glacier algae at low concentrations (both darken the visible with somewhat similar spectral shapes).
 - **Glacier algae**: Visible darkening with characteristic carotenoid and chlorophyll-a absorption features. Spectrally distinguishable from black carbon at 480-band resolution but not from 5-band satellite data.
 - **Mineral dust**: Very flat spectral signature at typical environmental concentrations (< ~5000 ppb). The cost surface is essentially insensitive to dust concentration in this regime — the spectral effect of 100 vs 5000 ppb dust is smaller than model noise. Dust retrievals are unreliable unless concentrations are very high (> 10,000 ppb) or strong prior constraints are applied.
 
-#### 4.8.2 Recommended Retrieval Configurations
+#### 4.9.2 Recommended Retrieval Configurations
 
-For **spectral data** (field spectrometer, 480 bands): retrieve up to 5 parameters (rds, rho, black_carbon, glacier_algae, dust), though dust should be treated with caution. Fix `direct` and `solzen` from known observing conditions.
+For **spectral data** (field spectrometer, 480 bands): retrieve SSA plus up to 3 impurity parameters (black_carbon, glacier_algae, dust), though dust should be treated with caution. Fix `direct` and `solzen` from known observing conditions. If independent density measurements are available, fix rho and retrieve rds directly instead of SSA.
 
-For **satellite bands** (Sentinel-2, Landsat 8, MODIS, 4-7 broadband values): fix density, dust, and sky conditions. Retrieve 2-3 parameters maximum (typically rds plus one or two dominant impurities). The limited spectral information from broadband observations cannot constrain more parameters than the number of observed bands, and in practice the information content is lower due to band correlations.
+For **satellite bands** (Sentinel-2, Landsat 8, MODIS, 4-7 broadband values): fix dust and sky conditions. Retrieve 2-3 parameters maximum (typically SSA plus 1-2 dominant impurities). The limited spectral information from broadband observations cannot constrain more parameters than the number of observed bands, and in practice the information content is lower due to band correlations. SSA is particularly advantageous in band mode because it collapses the rds/rho degeneracy into a single well-constrained parameter.
 
-#### 4.8.3 Computational Performance
+#### 4.9.3 Computational Performance
 
 | Configuration | Evaluations | Wall time (emulator) |
 |---|---|---|

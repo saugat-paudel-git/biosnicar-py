@@ -67,6 +67,8 @@ The repository ships with a 7-parameter default emulator at `data/emulators/glac
 
 All 7 parameters must be provided when calling `predict()` or passed via `fixed_params` in `retrieve()`.
 
+**Note on SSA retrieval:** The inversion module supports retrieving specific surface area (SSA) directly instead of rds and rho individually. When SSA is a free parameter, the inversion decomposes it into (rds, rho) for each emulator call using a reference density. See [INVERSION.md](INVERSION.md) for details.
+
 ## API Reference
 
 ### `Emulator.build(params, n_samples=10000, solver="adding-doubling", input_file="default", progress=True, seed=42, **fixed_overrides)`
