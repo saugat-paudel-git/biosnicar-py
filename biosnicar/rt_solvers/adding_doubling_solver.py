@@ -234,7 +234,10 @@ def adding_doubling_solver(tau, ssa, g, L_snw, ice, illumination, model_config):
 
     conservation_of_energy_check(illumination, F_abs, F_btm_net, F_top_pls)
 
-    outputs = get_outputs(illumination, albedo, model_config, L_snw, F_abs, F_btm_net)
+    outputs = get_outputs(
+        illumination, albedo, model_config, L_snw, F_abs, F_btm_net,
+        F_up, F_dwn, ice.dz, model_config.wavelengths,
+    )
 
     if model_config.smooth:
         outputs.albedo = apply_smoothing_function(outputs.albedo, model_config)
@@ -1134,7 +1137,10 @@ def conservation_of_energy_check(illumination, F_abs, F_btm_net, F_top_pls):
         pass
 
 
-def get_outputs(illumination, albedo, model_config, L_snw, F_abs, F_btm_net):
+def get_outputs(
+    illumination, albedo, model_config, L_snw, F_abs, F_btm_net,
+    F_up=None, F_dwn=None, ice_dz=None, wavelengths=None,
+):
     """Assimilates useful data into instance of Outputs class.
 
     Args:
@@ -1144,6 +1150,10 @@ def get_outputs(illumination, albedo, model_config, L_snw, F_abs, F_btm_net):
         L_snw: mass of ice in each layer
         F_abs: absorbed flux in each layer
         F_btm_net: net flux at bottom surface
+        F_up: spectral upwelling flux at interfaces (nbr_wvl, nbr_lyr+1)
+        F_dwn: spectral downwelling flux at interfaces (nbr_wvl, nbr_lyr+1)
+        ice_dz: layer thicknesses [m]
+        wavelengths: wavelength grid [µm]
 
     Returns:
         outputs: instance of Outputs class
@@ -1202,6 +1212,14 @@ def get_outputs(illumination, albedo, model_config, L_snw, F_abs, F_btm_net):
 
     # Spectral solar flux (for downstream band convolution)
     outputs.flx_slr = illumination.flx_slr.copy()
+
+    # Subsurface light field
+    if F_up is not None:
+        outputs.F_up = F_up
+        outputs.F_dwn = F_dwn
+        outputs._dz = list(ice_dz)
+        outputs._wavelengths = wavelengths
+        outputs._L_snw = L_snw
 
     return outputs
 

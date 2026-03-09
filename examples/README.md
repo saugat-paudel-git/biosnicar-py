@@ -14,6 +14,7 @@ Self-contained example scripts covering the full BioSNICAR workflow. Each script
 | 08  | [inversion_satellite.py](08_inversion_satellite.py) | SSA band-mode retrieval with Sentinel-2, Landsat 8, MODIS, `obs_uncertainty`                |
 | 09  | [inversion_methods.py](09_inversion_methods.py)     | L-BFGS-B, Nelder-Mead, differential evolution, MCMC comparison (SSA mode)                   |
 | 10  | [end_to_end_workflow.py](10_end_to_end_workflow.py) | Full pipeline: load emulator, synthetic S2 observation, SSA retrieval, validate              |
+| 11  | [subsurface_light.py](11_subsurface_light.py)       | Subsurface fluxes, PAR depth profiles, spectral heating rates                                |
 
 ## Running
 
