@@ -135,33 +135,49 @@ def toon_solver(tau, ssa, g, L_snw, ice, illumination, model_config, rt_config):
         e4,
     )
 
-    F_net, F_top_pls, F_btm_net, F_top_net, intensity = layer_fluxes(
-        ice,
-        illumination,
-        model_config,
-        tau_clm,
-        tau_star,
-        lam,
-        Y,
-        GAMMA,
-        C_pls_btm,
-        C_mns_btm,
-        C_pls_top,
-        C_mns_top,
-        e1,
-        e2,
-        e3,
-        e4,
-        mu_one,
+    F_net, F_top_pls, F_btm_net, F_top_net, intensity, F_up_lyr, F_down_lyr = (
+        layer_fluxes(
+            ice,
+            illumination,
+            model_config,
+            tau_clm,
+            tau_star,
+            lam,
+            Y,
+            GAMMA,
+            C_pls_btm,
+            C_mns_btm,
+            C_pls_top,
+            C_mns_top,
+            e1,
+            e2,
+            e3,
+            e4,
+            mu_one,
+        )
     )
+
+    # Normalize Toon F_up / F_dwn to (nbr_wvl, nbr_lyr+1) matching AD convention.
+    # F_up_lyr/F_down_lyr are (nbr_lyr, nbr_wvl) at layer bases.
+    # Prepend surface values as interface 0.
+    incoming = (illumination.mu_not * np.pi * illumination.Fs) + illumination.Fd
+    F_up_norm = np.column_stack(
+        [F_top_pls.reshape(-1, 1), F_up_lyr.T]
+    )  # (nbr_wvl, nbr_lyr+1)
+    F_dwn_norm = np.column_stack(
+        [incoming.reshape(-1, 1), F_down_lyr.T]
+    )  # (nbr_wvl, nbr_lyr+1)
 
     F_abs = absorbed_fluxes(ice, model_config, F_net, F_top_net)
     outputs = get_outputs(
-        model_config, ice, illumination, F_top_pls, F_top_net, F_btm_net, F_abs, L_snw
+        model_config, ice, illumination, F_top_pls, F_top_net, F_btm_net, F_abs, L_snw,
+        F_up_norm, F_dwn_norm, ice.dz, model_config.wavelengths,
     )
 
     if model_config.smooth:
         outputs.albedo = apply_smoothing_function(outputs.albedo, model_config)
+
+    outputs.albedo = np.clip(outputs.albedo, 0.0, 1.0)
 
     return outputs
 
@@ -704,7 +720,7 @@ def layer_fluxes(
     # = energy absorbed by underlying surface
     F_btm_net[0, :] = -F_net[ice.nbr_lyr - 1, :]
 
-    return F_net, F_top_pls, F_btm_net, F_top_net, intensity
+    return F_net, F_top_pls, F_btm_net, F_top_net, intensity, F_up, F_down
 
 
 def absorbed_fluxes(ice, model_config, F_net, F_top_net):
@@ -733,7 +749,8 @@ def absorbed_fluxes(ice, model_config, F_net, F_top_net):
 
 
 def get_outputs(
-    model_config, ice, illumination, F_top_pls, F_top_net, F_btm_net, F_abs, L_snw
+    model_config, ice, illumination, F_top_pls, F_top_net, F_btm_net, F_abs, L_snw,
+    F_up=None, F_dwn=None, ice_dz=None, wavelengths=None,
 ):
     """Assimilates useful data into instance of Outputs class.
 
@@ -744,6 +761,10 @@ def get_outputs(
         L_snw: mass of ice in each layer
         F_abs: absorbed flux in each layer
         F_btm_net: net flux at bottom surface
+        F_up: spectral upwelling flux at interfaces (nbr_wvl, nbr_lyr+1)
+        F_dwn: spectral downwelling flux at interfaces (nbr_wvl, nbr_lyr+1)
+        ice_dz: layer thicknesses [m]
+        wavelengths: wavelength grid [µm]
 
     Returns:
         outputs: instance of Outputs class
@@ -827,6 +848,14 @@ def get_outputs(
 
     # Spectral solar flux (for downstream band convolution)
     outputs.flx_slr = illumination.flx_slr.copy()
+
+    # Subsurface light field
+    if F_up is not None:
+        outputs.F_up = F_up
+        outputs.F_dwn = F_dwn
+        outputs._dz = list(ice_dz)
+        outputs._wavelengths = wavelengths
+        outputs._L_snw = L_snw
 
     return outputs
 

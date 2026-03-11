@@ -64,4 +64,8 @@ setup(
         "seaborn",
         "tqdm",
     ],
+    extras_require={
+        "inverse": ["scikit-learn>=1.0"],
+        "mcmc": ["emcee>=3"],
+    },
 )

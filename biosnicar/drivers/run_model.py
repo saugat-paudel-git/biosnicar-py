@@ -13,6 +13,7 @@ Example::
 """
 
 import re
+import warnings
 
 from biosnicar.drivers.setup_snicar import setup_snicar
 from biosnicar.optical_properties.column_OPs import get_layer_OPs, mix_in_impurities
@@ -21,7 +22,7 @@ from biosnicar.rt_solvers.toon_rt_solver import toon_solver
 from biosnicar.utils.display import plot_albedo
 from biosnicar.utils.validate_inputs import validate_inputs
 
-# Regex for impurity concentration keys like "impurity_0_conc"
+# Legacy regex for impurity concentration keys like "impurity_0_conc"
 _IMPURITY_CONC_RE = re.compile(r"^impurity_(\d+)_conc$")
 
 # Parameter keys that require recalculating irradiance
@@ -77,9 +78,16 @@ def run_model(
             - **hex_side** (*int | list*) — hexagonal column side length
             - **hex_length** (*int | list*) — hexagonal column length
             - **shp_fctr** (*float | list*) — shape factor
-            - **impurity_{i}_conc** (*float | list*) — concentration for
-              impurity *i* (0-based index), broadcast to ``[value, 0, ...]``
-              if scalar
+            - **black_carbon** (*float | list*) — black carbon conc (ppb)
+            - **snow_algae** (*float | list*) — snow algae conc (cells/mL)
+            - **glacier_algae** (*float | list*) — glacier algae conc
+              (cells/mL)
+
+            Impurity names correspond to YAML keys in ``inputs.yaml``.
+            Scalar values are broadcast to ``[value, 0, ...]``.
+
+            Legacy ``impurity_{i}_conc`` syntax is still accepted but
+            deprecated.
 
             All ice parameters are broadcast to all layers if a scalar is
             passed, or applied directly if a list.
@@ -165,6 +173,9 @@ def _apply_overrides(overrides, ice, illumination, impurities, input_file):
                 imp.conc = old[:new_nbr_lyr]
         ice.nbr_lyr = new_nbr_lyr
 
+    # Build name→index mapping from impurities list
+    _imp_name_map = {imp.name: i for i, imp in enumerate(impurities)}
+
     for key, value in overrides.items():
         # Illumination scalars
         if key in _ILLUMINATION_KEYS:
@@ -179,21 +190,35 @@ def _apply_overrides(overrides, ice, illumination, impurities, input_file):
                 setattr(ice, key, [value] * ice.nbr_lyr)
             needs_refractive = True
 
-        # Impurity concentration (impurity_0_conc, impurity_1_conc, ...)
+        # Named impurity keys (e.g. black_carbon, glacier_algae)
+        elif key in _imp_name_map:
+            idx = _imp_name_map[key]
+            if isinstance(value, list):
+                impurities[idx].conc = value
+            else:
+                impurities[idx].conc = [value] + [0] * (ice.nbr_lyr - 1)
+
+        # Legacy impurity_0_conc syntax (deprecated)
         else:
             m = _IMPURITY_CONC_RE.match(key)
             if m:
                 idx = int(m.group(1))
+                imp_name = impurities[idx].name if idx < len(impurities) else f"impurity {idx}"
+                warnings.warn(
+                    f"{key!r} is deprecated; use {imp_name!r} instead.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
                 if isinstance(value, list):
                     impurities[idx].conc = value
                 else:
-                    # Broadcast: put concentration in first layer, zero elsewhere
                     impurities[idx].conc = [value] + [0] * (ice.nbr_lyr - 1)
             else:
+                imp_names = sorted(_imp_name_map.keys())
                 raise ValueError(
                     f"Unknown override key {key!r}. Supported: "
                     f"{sorted(_ILLUMINATION_KEYS | _ICE_BROADCAST_KEYS)} "
-                    f"and 'impurity_{{i}}_conc'."
+                    f"and impurity names {imp_names}."
                 )
 
     if needs_refractive:

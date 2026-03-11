@@ -100,9 +100,9 @@ def run_snicar(
         dz=[0.02, thickness - 0.02],
         lwc=lwc,
         layer_type=layer_type,
-        impurity_0_conc=[black_carbon, 0],
-        impurity_1_conc=[snow_algae, 0],
-        impurity_2_conc=[glacier_algae, 0],
+        black_carbon=[black_carbon, 0],
+        snow_algae=[snow_algae, 0],
+        glacier_algae=[glacier_algae, 0],
     )
 
     rounded_broandband_albedo = np.round(outputs.BBA, 2)

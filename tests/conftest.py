@@ -59,7 +59,7 @@ def fuzz():
 @pytest.fixture
 def new_benchmark_ad():
     """Toggles generation of new BioSNICAR benchmarking data on/off."""
-    return True
+    return False
 
 
 @pytest.fixture

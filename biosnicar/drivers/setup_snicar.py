@@ -83,15 +83,40 @@ def build_impurities_array(input_file):
 
     impurities = []
 
-    for i, id in enumerate(inputs["IMPURITIES"]):
-        name = inputs["IMPURITIES"][id]["NAME"]
-        file = inputs["IMPURITIES"][id]["FILE"]
-        coated = inputs["IMPURITIES"][id]["COATED"]
-        unit = inputs["IMPURITIES"][id]["UNIT"]
-        conc = inputs["IMPURITIES"][id]["CONC"]
+    for key, entry in inputs["IMPURITIES"].items():
+        # New format: YAML key is the name (e.g. "black_carbon")
+        # Old format: NAME field holds the name (e.g. "bc")
+        name = entry.get("NAME", key)
+        file = entry["FILE"]
+        coated = entry["COATED"]
+        unit = entry["UNIT"]
+        conc = entry["CONC"]
         impurities.append(Impurity(file, coated, unit, name, conc))
 
     return impurities
+
+
+def get_impurity_names(input_file="default"):
+    """Return ordered list of impurity names from the YAML config.
+
+    Args:
+        input_file: Path to the YAML config, or ``"default"`` for the
+            bundled ``inputs.yaml``.
+
+    Returns:
+        List of impurity name strings (e.g. ``["black_carbon",
+        "snow_algae", "glacier_algae"]``).
+    """
+    if input_file == "default":
+        input_file = Path(__file__).resolve().parent.joinpath(
+            "../inputs.yaml"
+        ).as_posix()
+
+    inputs = load_inputs(input_file)
+    names = []
+    for key, entry in inputs["IMPURITIES"].items():
+        names.append(entry.get("NAME", key))
+    return names
 
 
 if __name__ == "__main__":

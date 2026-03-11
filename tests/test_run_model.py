@@ -61,7 +61,7 @@ def test_get_albedo_still_works():
 def test_impurity_override():
     """Impurity concentration override affects BBA."""
     out_clean = run_model()
-    out_dirty = run_model(impurity_0_conc=50000)
+    out_dirty = run_model(black_carbon=50000)
     # More black carbon -> lower albedo
     assert out_dirty.BBA < out_clean.BBA
 
@@ -131,7 +131,7 @@ def test_layer_count_change_resizes_all():
         rds=[500, 800, 1000],
         rho=[400, 600, 700],
         shp=[0, 0, 0],
-        impurity_1_conc=[10000, 0, 0],
+        snow_algae=[10000, 0, 0],
     )
     assert isinstance(outputs, Outputs)
     assert 0 < outputs.BBA < 1

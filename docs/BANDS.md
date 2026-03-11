@@ -161,7 +161,7 @@ Predict what a satellite would observe for a given ice configuration:
 ```python
 from biosnicar import run_model
 
-s2 = run_model(solzen=50, rds=500, impurity_0_conc=1000).to_platform("sentinel2")
+s2 = run_model(solzen=50, rds=500, black_carbon=1000).to_platform("sentinel2")
 print(f"Sentinel-2 B3 (green): {s2.B3:.3f}")
 print(f"Sentinel-2 NDSI:       {s2.NDSI:.3f}")
 ```

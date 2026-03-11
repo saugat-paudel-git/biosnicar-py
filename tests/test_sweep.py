@@ -30,10 +30,10 @@ def test_multi_param_sweep_shape():
 def test_impurity_conc_decreases_bba():
     """More black carbon -> lower BBA."""
     df = parameter_sweep(
-        params={"impurity.0.conc": [0, 5000, 50000]},
+        params={"black_carbon": [0, 5000, 50000]},
         progress=False,
     )
-    bbas = df.sort_values("impurity.0.conc")["BBA"].values
+    bbas = df.sort_values("black_carbon")["BBA"].values
     assert bbas[0] > bbas[1] > bbas[2], (
         f"BBA should decrease with increasing BC: {bbas}"
     )

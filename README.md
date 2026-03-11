@@ -22,7 +22,7 @@ No source code or data files were lost — only duplicate historical versions of
 
 ## Documentation and recent updates
 
-Detailed documentation is available at https://biosnicar.vercel.app. This README gives a brief overview of the key information required to run the model.
+Detailed documentation is available at https://biosnicar.vercel.app. This README gives a brief overview of the key information required to run the model. See also [docs/EMULATOR.md](docs/EMULATOR.md) and [docs/INVERSION.md](docs/INVERSION.md) for the emulator and inversion modules, and the [examples/](examples/) directory for worked examples.
 
 
 ## How to use
@@ -92,17 +92,59 @@ outputs = run_model()
 print(outputs.BBA)
 
 # Override specific parameters
-outputs = run_model(solzen=50, rds=1000, impurity_0_conc=500)
+outputs = run_model(solzen=50, rds=1000, black_carbon=500)
 print(outputs.albedo)  # 480-element spectral albedo
 ```
 
-Supported override keys: `solzen`, `direct`, `incoming`, `rds`, `rho`, `dz`, `lwc`, `layer_type`, `shp`, `grain_ar`, `cdom`, `water`, `hex_side`, `hex_length`, `shp_fctr`, and `impurity_{i}_conc` (where `i` is the 0-based impurity index). Scalar values for ice parameters are broadcast to all layers; scalar impurity concentrations are applied to the first layer only.
+Supported override keys: `solzen`, `direct`, `incoming`, `rds`, `rho`, `dz`, `lwc`, `layer_type`, `shp`, `grain_ar`, `cdom`, `water`, `hex_side`, `hex_length`, `shp_fctr`, and impurity names (`black_carbon`, `snow_algae`, `glacier_algae` — matching the YAML keys in `inputs.yaml`). Scalar values for ice parameters are broadcast to all layers; scalar impurity concentrations are applied to the first layer only.
 
 If a list override changes the number of layers (e.g. passing a 5-element `dz` when the default config has 2), all per-layer attributes are automatically resized. Ice properties (`rds`, `rho`, `grain_ar`, etc.) are extended by repeating their last value; impurity concentrations are zero-padded. This means you only need to specify the parameters you care about — the rest adjust to match.
 
 `run_model()` is also accessible as `biosnicar.run_model()` after `import biosnicar`.
 
 Parameters not exposed as `run_model()` overrides — such as refractive index variant (`OP_DIR_STUBS`), surface reflectance file (`SFC`), and RT approximation type (`APRX_TYP`) — can be changed by editing `biosnicar/inputs.yaml` directly or by passing a custom YAML path via `input_file=`. See the in-line annotations in `inputs.yaml` for guidance on valid values.
+
+### Working with Impurities
+
+Impurity concentrations are set using descriptive names that map directly to entries in `biosnicar/inputs.yaml`:
+
+| Name            | YAML key        | Unit     | Description   |
+| --------------- | --------------- | -------- | ------------- |
+| `black_carbon`  | `black_carbon`  | ppb      | Black carbon  |
+| `snow_algae`    | `snow_algae`    | cells/mL | Snow algae    |
+| `glacier_algae` | `glacier_algae` | cells/mL | Glacier algae |
+
+Use these names everywhere — in `run_model()`, `parameter_sweep()`, emulator building, and inversions:
+
+```python
+# run_model — scalar (applied to first layer) or per-layer list
+run_model(black_carbon=5000, glacier_algae=50000)
+run_model(glacier_algae=[40000, 10000, 0])  # per-layer
+
+# parameter_sweep
+parameter_sweep(params={"black_carbon": [0, 1000, 10000]})
+
+# Emulator
+Emulator.build(params={"rds": (100, 5000), "black_carbon": (0, 100000)}, ...)
+
+# Inversion
+retrieve(observed=obs, parameters=["ssa", "black_carbon"], emulator=emu)
+```
+
+**Adding a new impurity type:**
+
+1. Obtain an optical property `.npz` file (containing MAC, SSA, asymmetry parameter arrays)
+2. Add it to the LAP archive (`data/OP_data/480band/lap.npz`)
+3. Add an entry to `inputs.yaml` under `IMPURITIES`:
+   ```yaml
+   IMPURITIES:
+     my_new_impurity:
+       FILE: "my_impurity_file.npz"
+       COATED: False
+       UNIT: 0          # 0 = ppb (mass), 1 = cells/mL (count)
+       CONC: [0, 0]     # default concentration per layer
+   ```
+4. Use the YAML key as the parameter name: `run_model(my_new_impurity=500)`
 
 ### Parameter Sweeps
 
@@ -122,7 +164,7 @@ df = parameter_sweep(
 df.pivot_table(values="BBA", index="solzen", columns="rds").plot()
 ```
 
-Supported parameter keys include `solzen`, `direct`, `incoming`, `rds`, `rho`, `dz`, `layer_type`, and `impurity.{i}.conc` (where `i` is the 0-based impurity index). The function also accepts `solver` (`"adding-doubling"` or `"toon"`), `return_spectral=True` to include 480-band spectral albedo in the output, and `progress=True` for a tqdm progress bar.
+Supported parameter keys include `solzen`, `direct`, `incoming`, `rds`, `rho`, `dz`, `layer_type`, and impurity names (`black_carbon`, `snow_algae`, `glacier_algae`). The function also accepts `solver` (`"adding-doubling"` or `"toon"`), `return_spectral=True` to include 480-band spectral albedo in the output, and `progress=True` for a tqdm progress bar.
 
 A complete demo script is provided at `scripts/sweep_demo.py`:
 
@@ -130,7 +172,7 @@ A complete demo script is provided at `scripts/sweep_demo.py`:
 python scripts/sweep_demo.py
 ```
 
-More complex applications of the model code, for example, model inversions, field/model comparisons etc are included under `/experiments`, with details provided in that module's own README.
+More complex applications — including model inversions, emulator-based retrieval, and multi-platform band convolution — are demonstrated in the [examples/](examples/) directory.
 
 ### Platform Band Convolution — `.to_platform()`
 
@@ -160,6 +202,72 @@ print(df[["rds", "solzen", "BBA", "B3", "NDSI"]])
 ```
 
 Supported platforms: `sentinel2`, `sentinel3`, `landsat8`, `modis`, `cesm2band`, `cesmrrtmg`, `mar`, `hadcm3`. Detailed documentation including band definitions, data provenance, spectral indices, and instructions for replacing the initial tophat SRFs with manufacturer curves is in [BANDS.md](BANDS.md).
+
+### Emulator — Fast Surrogate Model
+
+The emulator is a neural-network surrogate trained on BioSNICAR forward model outputs. It predicts 480-band spectral albedo in ~microseconds (vs ~50 ms for the full model), making optimisation and MCMC practical.
+
+A pre-built default emulator ships with the repo at `data/emulators/glacier_ice_8_param_default.npz`:
+
+```python
+from biosnicar.emulator import Emulator
+from biosnicar import run_emulator
+
+# Load and predict
+emu = Emulator.load("data/emulators/glacier_ice_8_param_default.npz")
+outputs = run_emulator(emu, rds=1000, rho=600,
+                       black_carbon=5000, glacier_algae=50000)
+print(outputs.BBA)
+outputs.to_platform("sentinel2")
+```
+
+Build a custom emulator for different parameter ranges, impurity types, or ice configurations:
+
+```python
+emu = Emulator.build(
+    params={"rds": (100, 5000), "rho": (100, 917),
+            "black_carbon": (0, 100000), "glacier_algae": (0, 500000)},
+    n_samples=5000, layer_type=1, solzen=50, direct=1,
+)
+emu.save("my_emulator.npz")
+```
+
+`run_emulator()` returns an `Outputs` object with `.to_platform()` chaining, just like `run_model()`. Full documentation: [docs/EMULATOR.md](docs/EMULATOR.md). Examples: [examples/04_emulator_build.py](examples/04_emulator_build.py), [examples/05_emulator_predict.py](examples/05_emulator_predict.py).
+
+### Inversion — Retrieve Ice Properties from Observations
+
+The inverse module retrieves ice physical properties from observed albedo (spectral or satellite bands) using emulator-powered optimisation. The recommended approach is to retrieve **specific surface area (SSA)** — the physically meaningful optical parameter — rather than bubble radius and density individually. SSA is much better constrained (~5.5% error vs ~73% and ~33% for rds and rho individually):
+
+```python
+from biosnicar.inverse import retrieve
+
+# SSA retrieval (480-band observed albedo)
+result = retrieve(
+    observed=measured_albedo,
+    parameters=["ssa", "black_carbon", "glacier_algae"],
+    emulator=emu,
+    fixed_params={"direct": 1, "solzen": 50},
+)
+print(result.summary())
+print(result.best_fit["ssa"])   # m²/kg
+```
+
+```python
+import numpy as np
+
+# Satellite band retrieval (e.g. Sentinel-2)
+result = retrieve(
+    observed=np.array([0.82, 0.78, 0.75, 0.45, 0.03]),
+    parameters=["ssa", "black_carbon", "glacier_algae"],
+    emulator=emu,
+    platform="sentinel2",
+    observed_band_names=["B2", "B3", "B4", "B8", "B11"],
+    obs_uncertainty=np.array([0.02, 0.02, 0.02, 0.03, 0.05]),
+    fixed_params={"direct": 1, "solzen": 50, "dust": 1000},
+)
+```
+
+Four optimisation methods: `L-BFGS-B` (fast default), `Nelder-Mead` (derivative-free), `differential_evolution` (global search), `mcmc` (full Bayesian posterior). Use `fixed_params` to constrain known parameters. If independent density measurements are available, fix rho and retrieve rds directly instead of SSA. Full documentation: [docs/INVERSION.md](docs/INVERSION.md). Examples: [examples/07_inversion_spectral.py](examples/07_inversion_spectral.py), [examples/08_inversion_satellite.py](examples/08_inversion_satellite.py).
 
 We have also maintained a separate version of the biosnicar codebase that uses a "functional" programming style rather than the object-oriented approach taken here. We refer to this as biosnicar Classic and it is available in the `classic` branch of this repository. it might be useful for people already familiar with FORTRAN or Matlab implementations from previous literature. The two branches are entirely equivalent in their simulations but very different in their programming style. The object-oriented approach is preferred because it is more Pythonic, more flexible and easier to debug.
 
