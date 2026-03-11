@@ -124,8 +124,15 @@ class VerificationResult:
         (used for aggregate statistics).
     """
 
-    def __init__(self, benchmark_params, emulator_albedos, reference_albedos,
-                 flx_slr, unphysical_indices=None, physical_mask=None):
+    def __init__(
+        self,
+        benchmark_params,
+        emulator_albedos,
+        reference_albedos,
+        flx_slr,
+        unphysical_indices=None,
+        physical_mask=None,
+    ):
         self.benchmark_params = benchmark_params
         self.emulator_albedos = emulator_albedos
         self.reference_albedos = reference_albedos
@@ -208,15 +215,15 @@ class Emulator:
 
     def __init__(self):
         # Populated by build() or load()
-        self._weights = []       # list of 2-D weight matrices
-        self._biases = []        # list of 1-D bias vectors
+        self._weights = []  # list of 2-D weight matrices
+        self._biases = []  # list of 1-D bias vectors
         self._pca_components = None  # (n_pca, 480)
-        self._pca_mean = None        # (480,)
-        self._input_min = None       # (n_params,)
-        self._input_max = None       # (n_params,)
-        self._flx_slr = None         # (480,)
-        self._param_names = []       # ordered list of param names
-        self._bounds = OrderedDict() # {name: (lo, hi)}
+        self._pca_mean = None  # (480,)
+        self._input_min = None  # (n_params,)
+        self._input_max = None  # (n_params,)
+        self._flx_slr = None  # (480,)
+        self._param_names = []  # ordered list of param names
+        self._bounds = OrderedDict()  # {name: (lo, hi)}
         self._n_pca_components = 0
         self._training_score = None
         self._metadata = {}
@@ -251,9 +258,16 @@ class Emulator:
     # ── Build ─────────────────────────────────────────────────────────
 
     @classmethod
-    def build(cls, params, n_samples=10000, solver="adding-doubling",
-              input_file="default", progress=True, seed=42,
-              **fixed_overrides):
+    def build(
+        cls,
+        params,
+        n_samples=10000,
+        solver="adding-doubling",
+        input_file="default",
+        progress=True,
+        seed=42,
+        **fixed_overrides,
+    ):
         """Build an emulator by training an MLP on forward-model outputs.
 
         Parameters
@@ -334,6 +348,7 @@ class Emulator:
         if progress:
             try:
                 from tqdm import tqdm
+
                 iterator = tqdm(iterator, desc="Building emulator")
             except ImportError:
                 pass
@@ -353,8 +368,7 @@ class Emulator:
                     val = int(round(val))
                 overrides[name] = val
 
-            outputs = run_model(input_file=input_file, solver=solver,
-                                **overrides)
+            outputs = run_model(input_file=input_file, solver=solver, **overrides)
             albedos.append(np.array(outputs.albedo, dtype=np.float64))
             if flx_slr_ref is None:
                 flx_slr_ref = np.array(outputs.flx_slr, dtype=np.float64)
@@ -365,9 +379,7 @@ class Emulator:
         # occasionally produces negative albedos at specific pathological
         # parameter combinations (numerical instability in the RT solver).
         # Including them would distort the PCA basis and MLP training.
-        physical_mask = np.all(
-            (albedo_matrix >= 0) & (albedo_matrix <= 1.01), axis=1
-        )
+        physical_mask = np.all((albedo_matrix >= 0) & (albedo_matrix <= 1.01), axis=1)
         n_unphysical = int(np.sum(~physical_mask))
         if n_unphysical:
             warnings.warn(
@@ -410,7 +422,7 @@ class Emulator:
         emu._input_min = input_min
         emu._input_max = input_max
         emu._pca_components = pca.components_.copy()  # (n_pca, 480)
-        emu._pca_mean = pca.mean_.copy()              # (480,)
+        emu._pca_mean = pca.mean_.copy()  # (480,)
         emu._n_pca_components = n_pca
         emu._flx_slr = flx_slr_ref
         emu._training_score = float(r2_score)
@@ -512,8 +524,14 @@ class Emulator:
 
     # ── Verify ──────────────────────────────────────────────────────────
 
-    def verify(self, benchmark_params=None, n_points=20, seed=123,
-               input_file="default", progress=True):
+    def verify(
+        self,
+        benchmark_params=None,
+        n_points=20,
+        seed=123,
+        input_file="default",
+        progress=True,
+    ):
         """Measure emulator accuracy against the full forward model.
 
         Runs both the emulator and ``run_model()`` for a suite of benchmark
@@ -562,6 +580,7 @@ class Emulator:
         if progress:
             try:
                 from tqdm import tqdm
+
                 iterator = tqdm(iterator, desc="Verifying emulator")
             except ImportError:
                 pass
@@ -577,8 +596,7 @@ class Emulator:
             # Forward model reference
             overrides = dict(fixed)
             overrides.update(params)
-            outputs = run_model(input_file=input_file, solver=solver,
-                                **overrides)
+            outputs = run_model(input_file=input_file, solver=solver, **overrides)
             raw = np.array(outputs.albedo, dtype=np.float64)
 
             if np.any(raw < 0) or np.any(raw > 1.01):
@@ -706,11 +724,10 @@ class Emulator:
         return emu
 
     def __repr__(self):
-        return (
-            "Emulator(params={}, n_pca={}, training_r2={})".format(
-                self._param_names, self._n_pca_components,
-                self._training_score,
-            )
+        return "Emulator(params={}, n_pca={}, training_r2={})".format(
+            self._param_names,
+            self._n_pca_components,
+            self._training_score,
         )
 
 
@@ -718,7 +735,7 @@ def _jsonable(v):
     """Convert a value to a JSON-serialisable type."""
     if isinstance(v, (np.integer, np.int_)):
         return int(v)
-    if isinstance(v, (np.floating, np.float_)):
+    if isinstance(v, (np.floating, np.float64)):
         return float(v)
     if isinstance(v, np.ndarray):
         return v.tolist()
