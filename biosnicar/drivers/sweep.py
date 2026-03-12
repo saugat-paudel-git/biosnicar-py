@@ -88,6 +88,29 @@ class SweepResult(pd.DataFrame):
         band_df = pd.DataFrame(rows, index=self.index)
         return pd.concat([self, band_df], axis=1)
 
+    def plot_sensitivity(self, y="BBA", save=None, show=False, **kwargs):
+        """Plot parameter sensitivity.
+
+        See :func:`biosnicar.plotting.plot_sensitivity`.
+
+        Parameters
+        ----------
+        y : str
+            Column to plot (default ``"BBA"``).
+        save : str or Path, optional
+            Save figure to this path.
+        show : bool
+            If True, display in an interactive window.
+        **kwargs
+            Passed to :func:`~biosnicar.plotting.plot_sensitivity`.
+
+        Returns
+        -------
+        fig, ax : matplotlib Figure and Axes
+        """
+        from biosnicar.plotting import plot_sensitivity
+        return plot_sensitivity(self, y=y, save=save, show=show, **kwargs)
+
 # Legacy regex for impurity concentration keys like "impurity.0.conc"
 _IMPURITY_CONC_RE = re.compile(r"^impurity\.(\d+)\.conc$")
 

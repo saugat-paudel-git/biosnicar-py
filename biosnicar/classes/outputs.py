@@ -177,3 +177,51 @@ class Outputs:
         L_snw = np.asarray(self._L_snw)
         # K/s per band, then convert to K/hr
         return (F_abs / (L_snw[np.newaxis, :] * 2117)) * 3600
+
+    def plot(self, *others, labels=None, platform=None,
+             save=None, show=False, **kwargs):
+        """Plot spectral albedo. See :func:`biosnicar.plotting.plot_albedo`.
+
+        Parameters
+        ----------
+        *others : Outputs
+            Additional Outputs objects to overlay.
+        labels : list of str, optional
+            Legend labels.
+        platform : str, optional
+            Overlay platform band values (e.g. ``"sentinel2"``).
+        save : str or Path, optional
+            Save figure to this path.
+        show : bool
+            If True, display in an interactive window.
+        **kwargs
+            Passed to :func:`~biosnicar.plotting.plot_albedo`.
+
+        Returns
+        -------
+        fig, ax : matplotlib Figure and Axes
+        """
+        from biosnicar.plotting import plot_albedo
+        return plot_albedo(self, *others, labels=labels, platform=platform,
+                           save=save, show=show, **kwargs)
+
+    def plot_subsurface(self, save=None, show=False, **kwargs):
+        """Plot subsurface PAR depth profiles: normalised and absolute.
+
+        See :func:`biosnicar.plotting.plot_subsurface`.
+
+        Parameters
+        ----------
+        save : str or Path, optional
+            Save figure to this path.
+        show : bool
+            If True, display in an interactive window.
+        **kwargs
+            Passed to :func:`~biosnicar.plotting.plot_subsurface`.
+
+        Returns
+        -------
+        fig, (ax_norm, ax_abs) : matplotlib Figure and Axes
+        """
+        from biosnicar.plotting import plot_subsurface
+        return plot_subsurface(self, save=save, show=show, **kwargs)
