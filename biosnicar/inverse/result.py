@@ -167,3 +167,27 @@ class RetrievalResult:
                 f"acceptance = {self.acceptance_fraction:.3f}"
             )
         return "\n".join(lines)
+
+    def plot(self, true_values=None, save=None, show=False, **kwargs):
+        """Plot spectral fit and retrieved parameters.
+
+        See :func:`biosnicar.plotting.plot_retrieval`.
+
+        Parameters
+        ----------
+        true_values : dict, optional
+            ``{param_name: true_value}`` for comparison.
+        save : str or Path, optional
+            Save figure to this path.
+        show : bool
+            If True, display in an interactive window.
+        **kwargs
+            Passed to :func:`~biosnicar.plotting.plot_retrieval`.
+
+        Returns
+        -------
+        fig, (ax_spec, ax_params) : matplotlib Figure and Axes
+        """
+        from biosnicar.plotting import plot_retrieval
+        return plot_retrieval(self, true_values=true_values,
+                              save=save, show=show, **kwargs)
