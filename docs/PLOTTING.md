@@ -151,19 +151,19 @@ each Sentinel-2 band position showing the SRF-convolved albedo.
 
 ---
 
-## 2. `plot_subsurface` — Subsurface PAR profile
+## 2. `plot_subsurface` — Subsurface PAR profiles
 
-Plot how Photosynthetically Active Radiation (400--700 nm) attenuates with
-depth through the ice column.  This is relevant for biological habitat
-studies: the PAR profile determines where within the ice enough light is
-available for photosynthesis.
+Two-panel figure showing how Photosynthetically Active Radiation (400--700 nm)
+attenuates with depth through the ice column.  This is relevant for biological
+habitat studies: the PAR profile determines where within the ice enough light
+is available for photosynthesis.
 
 ### Method form
 
 ```python
 outputs = run_model(solzen=50, rds=1000)
 outputs.plot_subsurface(show=True)
-outputs.plot_subsurface(save="par_profile.pdf")
+outputs.plot_subsurface(irradiance=800, save="par_profile.pdf")
 ```
 
 ### Standalone form
@@ -171,7 +171,8 @@ outputs.plot_subsurface(save="par_profile.pdf")
 ```python
 from biosnicar.plotting import plot_subsurface
 
-fig, ax = plot_subsurface(outputs, figsize=(6, 5), save="par.png")
+fig, (ax_norm, ax_abs) = plot_subsurface(outputs, irradiance=1000,
+                                          save="par.png")
 ```
 
 ### Parameters
@@ -179,10 +180,13 @@ fig, ax = plot_subsurface(outputs, figsize=(6, 5), save="par.png")
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `outputs` | `Outputs` | *(required)* | Must have subsurface flux data populated (i.e. from the adding-doubling solver). |
+| `irradiance` | `float` | `1000.0` | Total incoming solar irradiance in W m-2, used to scale normalised model fluxes to absolute PAR in panel (b). |
 
-The default `figsize` is `(6, 5)`.
+The default `figsize` is `(12, 5)`.
 
 ### What it shows
+
+**Panel (a) — Normalised PAR:**
 
 - **x-axis:** PAR normalised to the surface value, so that 1.0 corresponds to
   the incoming PAR at the surface.
@@ -194,6 +198,17 @@ low-absorption medium (ice in the visible has single-scattering albedo
 ~0.99998), backscattered light from below augments the downwelling stream.
 This radiation trapping effect is strongest within the first transport
 mean-free-path and diminishes with depth.
+
+**Panel (b) — Absolute PAR:**
+
+- **x-axis:** PAR in W m-2.
+- **y-axis:** depth in centimetres, increasing downward.
+
+The model works in normalised flux units internally (total incoming sums to 1).
+Panel (b) converts to absolute units by multiplying by the `irradiance`
+parameter.  The default of 1000 W m-2 is a reasonable clear-sky approximation;
+set this to your site-specific value for quantitative use.  The assumed
+irradiance is annotated on the plot.
 
 ### Requirements
 
@@ -401,7 +416,7 @@ outputs.plot(show=True)
 | Function | Method on | Description | Return |
 |----------|-----------|-------------|--------|
 | `plot_albedo` | `Outputs.plot()` | Spectral albedo with optional platform band overlay | `fig, ax` |
-| `plot_subsurface` | `Outputs.plot_subsurface()` | PAR depth profile | `fig, ax` |
+| `plot_subsurface` | `Outputs.plot_subsurface()` | Normalised + absolute PAR depth profiles | `fig, (ax_norm, ax_abs)` |
 | `plot_retrieval` | `RetrievalResult.plot()` | Spectral fit + retrieved parameters with uncertainties | `fig, (ax_spec, ax_params)` |
 | `plot_sensitivity` | `SweepResult.plot_sensitivity()` | Auto-detected line / heatmap / multi-line sensitivity plot | `fig, ax` |
 

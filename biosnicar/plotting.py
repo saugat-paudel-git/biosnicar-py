@@ -298,7 +298,7 @@ def plot_retrieval(result, true_values=None, wvl_range=(0.35, 2.5),
     # ── Panel (a): Observed vs fitted spectrum ──
     observed = result.observed
     predicted = result.predicted_albedo
-    is_band_mode = len(observed) < 100  # heuristic: band mode has < 30 values
+    is_band_mode = len(observed) < 100  # band mode typically has < 30 values
 
     if is_band_mode:
         x = np.arange(len(observed))

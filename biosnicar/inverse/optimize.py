@@ -367,12 +367,13 @@ def retrieve(
     # --- Populate derived quantities for SSA mode ---
     if use_ssa and "ssa" in result.best_fit:
         ssa_val = result.best_fit["ssa"]
-        phi = 1.0 - _ref_rho / 917.0
-        rds_internal = 3.0 * phi / (ssa_val * _ref_rho) / 1e-6
-        result.derived = {
-            "rds_internal": float(rds_internal),
-            "rho_ref": float(_ref_rho),
-        }
+        if ssa_val > 0:
+            phi = 1.0 - _ref_rho / 917.0
+            rds_internal = 3.0 * phi / (ssa_val * _ref_rho) / 1e-6
+            result.derived = {
+                "rds_internal": float(rds_internal),
+                "rho_ref": float(_ref_rho),
+            }
 
     return result
 

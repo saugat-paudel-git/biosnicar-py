@@ -118,7 +118,10 @@ _IMPURITY_CONC_RE = re.compile(r"^impurity\.(\d+)\.conc$")
 _ILLUMINATION_KEYS = {"solzen", "direct", "incoming"}
 
 # Parameter keys that apply to the ice object (broadcast to all layers)
-_ICE_BROADCAST_KEYS = {"rds", "rho", "dz", "lwc", "layer_type"}
+_ICE_BROADCAST_KEYS = {
+    "rds", "rho", "dz", "lwc", "layer_type",
+    "cdom", "shp", "water", "hex_side", "hex_length", "shp_fctr", "grain_ar",
+}
 
 _VALID_KEYS = _ILLUMINATION_KEYS | _ICE_BROADCAST_KEYS
 
@@ -286,6 +289,11 @@ def _apply_params(combo_dict, ice, illumination, impurities, input_file):
             m = _IMPURITY_CONC_RE.match(key)
             if m:
                 idx = int(m.group(1))
+                if idx >= len(impurities):
+                    raise IndexError(
+                        f"Impurity index {idx} out of range "
+                        f"(only {len(impurities)} impurities configured)."
+                    )
                 impurities[idx].conc = [value] * ice.nbr_lyr
 
     if needs_refractive:
