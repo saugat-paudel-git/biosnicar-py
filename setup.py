@@ -53,7 +53,7 @@ setup(
         "Topic :: Scientific/Engineering :: Atmospheric Science",
         "Topic :: Utilities",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.10",
     install_requires=[
         "numpy",
         "matplotlib",

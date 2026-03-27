@@ -172,7 +172,7 @@ The forward model takes ~50 ms per evaluation. This limits what you can do:
 | ------------------------------------- | ----------- | ------------- |
 | Direct optimisation (scipy)           | 100-500     | 5-25 s        |
 | Global optimisation (diff. evolution) | 500-5000    | 25 s - 4 min  |
-| MCMC (32 walkers x 5000 steps)        | 160,000     | ~2.2 hours    |
+| MCMC (32 walkers x 2000 steps)        | 64,000      | ~53 minutes   |
 | **Emulator** optimisation             | 100-500     | **< 100 ms**  |
 | **Emulator** MCMC                     | 160,000     | **~1 minute** |
 

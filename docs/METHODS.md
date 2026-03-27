@@ -15,7 +15,7 @@ The forward model accepts physical parameters including bubble effective radius 
 
 ### 2.1 Motivation
 
-Many applications require thousands to millions of forward model evaluations: gradient-based optimisation (~100-500 evaluations), global optimisation (~500-5000), and Bayesian posterior sampling via MCMC (~50,000-200,000). At 50 ms per evaluation, MCMC with 32 walkers and 5000 steps would require ~2.2 hours. An emulator that predicts in microseconds makes these workflows practical.
+Many applications require thousands to millions of forward model evaluations: gradient-based optimisation (~100-500 evaluations), global optimisation (~500-5000), and Bayesian posterior sampling via MCMC (~50,000-200,000). At 50 ms per evaluation, MCMC with 32 walkers and 2000 steps (plus 500 burn-in) would require ~53 minutes. An emulator that predicts in microseconds makes these workflows practical.
 
 ### 2.2 Architecture: PCA + MLP
 
