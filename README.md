@@ -2,6 +2,10 @@
 
 A radiative transfer model for predicting the spectral albedo of snow and glacier ice, with integrated neural-network emulator, inverse retrieval framework and native support for common satellite and GCM platforms.
 
+### **[Interactive classroom — biosnicar-classroom.netlify.app](https://biosnicar-classroom.netlify.app/)**
+
+Learn the fundamentals of radiative transfer in snow and ice, explore real BioSNICAR spectra with interactive sliders, and try your hand at parameter retrieval — all in the browser, no installation required.
+
 ### **[Full documentation at biosnicar.vercel.app](https://biosnicar.vercel.app)**
 
 <img src="./example-output.jpg" width=500>
@@ -21,7 +25,7 @@ BioSNICAR computes 480-band spectral albedo (0.2–5.0 µm) from the physical pr
 
 ## Installation
 
-Requires Python ≥ 3.8. Clone and install in a fresh environment:
+Requires Python ≥ 3.10. Clone and install in a fresh environment:
 
 ```bash
 git clone https://github.com/jmcook1186/biosnicar-py.git
@@ -259,6 +263,8 @@ The default configuration is in `biosnicar/inputs.yaml`. A guide to choosing phy
 | Plotting | [docs/PLOTTING.md](docs/PLOTTING.md) |
 | RT methods | [docs/METHODS.md](docs/METHODS.md) |
 | Worked examples | [examples/](examples/) |
+| Interactive classroom | [biosnicar-classroom.netlify.app](https://biosnicar-classroom.netlify.app/) |
+| Tutorial notebooks | [notebooks/](notebooks/) |
 
 
 ## Repository history note (March 2026)
@@ -269,8 +275,6 @@ The git history was rewritten in March 2026 to remove large binary files, reduci
 ## Contributing
 
 Issues and pull requests are welcome. PRs trigger CI tests via GitHub Actions; PRs that pass will be reviewed.
-
-A `classic` branch is also maintained with a functional (non-OO) programming style for users familiar with the original FORTRAN/Matlab implementations.
 
 
 ## License

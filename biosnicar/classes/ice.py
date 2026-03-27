@@ -38,10 +38,9 @@ class Ice:
         self.layer_type = inputs["ICE"]["LAYER_TYPE"]
         self.cdom = inputs["ICE"]["CDOM"]
         self.rho = inputs["ICE"]["RHO"]
-        self.sfc = np.genfromtxt(
-            _BASE + "/" + inputs["PATHS"]["SFC"],
-            delimiter="csv",
-        )
+        _sfc_path = _BASE + "/" + inputs["PATHS"]["SFC"]
+        with open(_sfc_path, "rt") as _fh:
+            self.sfc = np.genfromtxt(_fh, delimiter="csv")
         self.rf = inputs["ICE"]["RF"]
         self.shp = inputs["ICE"]["SHP"]
         self.rds = inputs["ICE"]["RDS"]
